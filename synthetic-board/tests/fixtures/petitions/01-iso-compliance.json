@@ -1,0 +1,8 @@
+{
+  "petition_id": "00000000-0000-4000-8000-000000000001",
+  "submitted_at": "2026-05-29T10:00:00Z",
+  "submitter": "test_founder",
+  "meeting_type": "idea_screen",
+  "pitch": "We are building a SaaS platform for mid-market manufacturers in Central Europe that automates ISO 27001 compliance evidence collection from existing IT systems. The platform connects to Azure AD, Microsoft 365, SCCM, and major ITSM tools, continuously gathers audit evidence, and generates the artifact package an auditor needs. We charge €1,200 per month flat per company. Target customers are 200-1500 employee manufacturers in Poland, Czechia, Slovakia, Hungary. The market is roughly 8,000 companies in scope; we estimate 1,500 will be in scope for NIS2 by 2027. Current GTM is direct outbound plus partnerships with two managed security service providers. Founding team is two engineers and one ex-auditor. We have three pilot customers, no paid customers yet. We are raising a €1.5M pre-seed to extend runway 18 months and hit €500k ARR.",
+  "context": "Founder background: technical lead has 12 years in industrial cybersecurity; the auditor co-founder spent 8 years at a Big Four firm doing exactly these audits. Competition: Drata, Vanta, Secureframe — all US-headquartered, none meaningfully localized for CEE compliance frameworks. Local incumbents are spreadsheet-based consultancies. The market signal driving urgency is NIS2 enforcement starting October 2024 with national transposition deadlines through 2026."
+}

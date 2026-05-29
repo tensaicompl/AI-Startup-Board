@@ -1,0 +1,8 @@
+{
+  "petition_id": "00000000-0000-4000-8000-000000000003",
+  "submitted_at": "2026-05-29T10:10:00Z",
+  "submitter": "test_founder",
+  "meeting_type": "idea_screen",
+  "pitch": "We are building an AI-assisted enterprise software development framework for regulated industries (aviation, banking, healthcare). Our system wraps Claude Code with a deterministic five-step pipeline: requirements ingestion, code planning, parallel implementation, automated testing, and security review. Customers get auditable AI code generation with full traceability. Pricing is €50k/year per development team. We have one anchor customer (a major aviation operator) generating €200k ARR. The founding team has 15 years of enterprise IT delivery experience. We are seeing inbound interest from EU banks and want to raise €3M seed to hire 6 engineers and expand to three new sectors.",
+  "context": "The founder is currently delivering this product as a service inside a large IT consultancy. Spinning it out into a standalone company requires negotiation with the current employer. Competition: GitHub Copilot Enterprise, Cursor, and a wave of agentic coding startups (Cognition, Cline, Aider). Differentiation claim: deterministic pipeline (vs free-form agents) plus regulated-industry compliance posture."
+}

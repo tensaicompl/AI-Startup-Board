@@ -1,0 +1,8 @@
+# Decision 005: Retry-path tests patch the validator, not the LLM output
+
+**Date:** 2026-05-29
+**Status:** accepted
+**Context:** The 500-word body limit applies to the combined text of verdict_reasoning + dissent_summary + kill_criteria. Testing the retry path (over-budget → retry → succeed, and over-budget × 2 → hard fail) by crafting LLM outputs that exceed the word limit while staying under per-field character limits proved fragile — the constraints interact (short words pack more words per character, but the prose becomes meaningless; realistic prose hits character limits before word limits). Three attempts at crafting valid-but-over-budget outputs all required increasingly artificial text.
+**Decision:** Retry-path tests use `monkeypatch` to replace `_count_words` with a rigged version that returns 999 (over-budget) on demand. This tests the control flow — does the synthesizer retry once and succeed, or retry once and raise `MemoSynthesisError` — without coupling to the specific interaction between character and word constraints. The constraint logic itself (per-field char limits via Pydantic, combined word count via `_count_words`) is verified separately by `test_combined_body_under_500_words`, which runs against real mock output.
+**Alternatives considered:** (1) Crafting prose that violates word count but not char limits — rejected after three failed attempts; the test became about the test data, not the control flow. (2) Raising the char limits in test — rejected because it would test a different schema than production.
+**Consequences:** The retry tests verify control flow only. The structural word/char limit enforcement is tested separately. This is the correct separation.

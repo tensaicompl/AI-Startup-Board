@@ -1,0 +1,98 @@
+# Idea Screen Protocol Definition
+# Version 1.0.0
+# This file is read by the chair at CONVENE to configure the meeting.
+
+protocol_id: idea_screen
+protocol_version: "1.0.0"
+description: >
+  The smallest meeting that proves the thesis. A founder submits a one-paragraph
+  pitch. Three seats deliberate under the standard eight-state protocol.
+  Output is a one-page memo: verdict, dissent, kill criteria, next action.
+
+# Seating
+quorum:
+  required_seats: 3
+  quorum_floor: 2          # if seats abstain, can proceed with this many
+seats:
+  - operator-ceo
+  - devils-advocate
+  - outsider
+
+# Roles
+voting_seats:
+  - operator-ceo
+  - devils-advocate
+  - outsider
+devils_advocate_seat: devils-advocate
+
+# State machine config
+states:
+  - CONVENE
+  - SEALED_OPENING
+  - ANONYMIZED_REVEAL
+  - IDENTIFIED_REBUTTAL
+  - DEVILS_ADVOCATE
+  - CONFIDENCE_VOTE
+  - FORCED_DISSENT_CHECK   # conditional; only on unanimity
+  - MEMO_SYNTHESIS
+
+# Per-state config
+per_state:
+  SEALED_OPENING:
+    parallel: true
+    per_seat_timeout_seconds: 60
+    on_malformed: retry_once_then_abstain
+    memory_access: persona_only
+  ANONYMIZED_REVEAL:
+    parallel: true
+    per_seat_timeout_seconds: 60
+    memory_access: persona_plus_anonymized_peers
+  IDENTIFIED_REBUTTAL:
+    parallel: true
+    per_seat_timeout_seconds: 60
+    memory_access: persona_plus_identified_peers
+    max_rounds: 1            # MVP: one rebuttal round only
+  DEVILS_ADVOCATE:
+    parallel: false
+    per_seat_timeout_seconds: 60
+    memory_access: full_meeting_transcript
+  CONFIDENCE_VOTE:
+    parallel: true
+    per_seat_timeout_seconds: 30
+    memory_access: full_meeting_transcript
+  FORCED_DISSENT_CHECK:
+    parallel: false
+    trigger: unanimous_vote
+    seat_selector: lowest_confidence_seat   # ties broken alphabetically by seat_id
+    per_seat_timeout_seconds: 60
+  MEMO_SYNTHESIS:
+    parallel: false
+    synthesis_model: claude-sonnet-4-6
+    max_tokens: 1500
+    enforce_word_limits: true
+
+# Voting
+voting:
+  method: confidence_weighted
+  recalibration: per_persona       # uses each persona's recalibration_factor
+  tie_break: dissent_check         # if scores tie, run forced dissent
+
+# Memo
+memo:
+  template: idea_screen_v1
+  body_max_words: 500
+  rendering: markdown
+  signatures_required: all_voting_seats
+
+# Diversity requirement
+diversity:
+  min_distinct_axes: 4             # of 7 worldview axes
+  refuse_if_below: true
+
+# Cost & latency guardrails
+cost:
+  soft_cap_usd: 5.0
+  hard_cap_usd: 20.0
+latency:
+  target_seconds: 90
+  hard_cap_seconds: 300

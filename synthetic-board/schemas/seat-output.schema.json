@@ -1,0 +1,173 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://sboard.local/schemas/seat-output.schema.json",
+  "title": "SeatOutput",
+  "description": "The structured output returned by a seat at any protocol stage. Discriminated by the 'stage' field.",
+  "type": "object",
+  "oneOf": [
+    { "$ref": "#/definitions/SealedOpening" },
+    { "$ref": "#/definitions/AnonymizedReview" },
+    { "$ref": "#/definitions/Rebuttal" },
+    { "$ref": "#/definitions/DevilsAdvocate" },
+    { "$ref": "#/definitions/Vote" },
+    { "$ref": "#/definitions/ForcedDissent" }
+  ],
+  "definitions": {
+
+    "SealedOpening": {
+      "type": "object",
+      "required": ["seat_id", "stage", "position", "one_paragraph_case", "top_three_reasons", "kill_criteria", "confidence_raw"],
+      "properties": {
+        "seat_id": { "type": "string" },
+        "stage": { "const": "sealed_opening" },
+        "position": { "enum": ["proceed", "kill", "conditional"] },
+        "one_paragraph_case": {
+          "type": "string",
+          "minLength": 100,
+          "maxLength": 1500
+        },
+        "top_three_reasons": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 10, "maxLength": 250 },
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "kill_criteria": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 10, "maxLength": 250 },
+          "minItems": 1,
+          "maxItems": 5
+        },
+        "confidence_raw": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "AnonymizedReview": {
+      "type": "object",
+      "required": ["seat_id", "stage", "reviews"],
+      "properties": {
+        "seat_id": { "type": "string" },
+        "stage": { "const": "anonymized_review" },
+        "reviews": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["target_label", "agreement", "one_sentence_reason"],
+            "properties": {
+              "target_label": {
+                "type": "string",
+                "pattern": "^Seat [A-Z]$"
+              },
+              "agreement": {
+                "enum": ["agree", "disagree", "undecided"]
+              },
+              "one_sentence_reason": {
+                "type": "string",
+                "minLength": 10,
+                "maxLength": 300
+              }
+            },
+            "additionalProperties": false
+          },
+          "minItems": 1
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "Rebuttal": {
+      "type": "object",
+      "required": ["seat_id", "stage", "position", "position_changed", "rebuttal_text"],
+      "properties": {
+        "seat_id": { "type": "string" },
+        "stage": { "const": "rebuttal" },
+        "position": { "enum": ["proceed", "kill", "conditional"] },
+        "position_changed": { "type": "boolean" },
+        "change_reason": {
+          "type": ["string", "null"],
+          "maxLength": 500
+        },
+        "rebuttal_text": {
+          "type": "string",
+          "minLength": 50,
+          "maxLength": 1500
+        }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": { "properties": { "position_changed": { "const": true } } },
+          "then": { "required": ["change_reason"], "properties": { "change_reason": { "type": "string", "minLength": 10 } } }
+        }
+      ]
+    },
+
+    "DevilsAdvocate": {
+      "type": "object",
+      "required": ["seat_id", "stage", "majority_trend", "steelman_against_majority", "strongest_kill_condition"],
+      "properties": {
+        "seat_id": { "type": "string" },
+        "stage": { "const": "devils_advocate" },
+        "majority_trend": { "enum": ["proceed", "kill", "conditional", "split"] },
+        "steelman_against_majority": {
+          "type": "string",
+          "minLength": 200,
+          "maxLength": 2000
+        },
+        "strongest_kill_condition": {
+          "type": "string",
+          "minLength": 20,
+          "maxLength": 500
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "Vote": {
+      "type": "object",
+      "required": ["seat_id", "stage", "verdict", "confidence_raw", "one_sentence_rationale"],
+      "properties": {
+        "seat_id": { "type": "string" },
+        "stage": { "const": "vote" },
+        "verdict": { "enum": ["proceed", "kill", "conditional"] },
+        "confidence_raw": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "one_sentence_rationale": {
+          "type": "string",
+          "minLength": 20,
+          "maxLength": 300
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "ForcedDissent": {
+      "type": "object",
+      "required": ["seat_id", "stage", "counter_verdict", "counter_case", "would_change_mind_if"],
+      "properties": {
+        "seat_id": { "type": "string" },
+        "stage": { "const": "forced_dissent" },
+        "counter_verdict": { "enum": ["proceed", "kill", "conditional"] },
+        "counter_case": {
+          "type": "string",
+          "minLength": 200,
+          "maxLength": 2000
+        },
+        "would_change_mind_if": {
+          "type": "string",
+          "minLength": 20,
+          "maxLength": 500
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

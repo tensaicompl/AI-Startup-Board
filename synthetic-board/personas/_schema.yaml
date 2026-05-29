@@ -1,0 +1,225 @@
+# Persona Steering File Schema
+# Version 1.0.0
+# This schema validates the YAML frontmatter of every persona file.
+# It is parsed as YAML, validated against this JSON-Schema-style spec,
+# and any file that fails validation cannot be seated.
+
+$schema: "http://json-schema.org/draft-07/schema#"
+title: Persona Frontmatter
+type: object
+required:
+  - seat_id
+  - role
+  - voting
+  - voting_weight
+  - permanent
+  - is_devils_advocate
+  - grounding
+  - worldview
+  - voice
+  - protocol
+  - provenance
+
+properties:
+
+  seat_id:
+    type: string
+    pattern: "^[a-z][a-z0-9_-]{2,30}$"
+    description: Unique identifier, snake_case or kebab-case.
+
+  role:
+    type: string
+    enum:
+      - Operator-CEO
+      - Visionary
+      - CFO
+      - CTO
+      - CMO
+      - Devil's Advocate
+      - Outsider
+    description: Functional role on the board.
+
+  voting:
+    type: boolean
+    description: Does this seat cast a verdict vote?
+
+  voting_weight:
+    type: number
+    minimum: 0.5
+    maximum: 1.5
+    description: Multiplier on recalibrated confidence in tally.
+
+  permanent:
+    type: boolean
+    description: Does this seat stay across meetings or rotate?
+
+  is_devils_advocate:
+    type: boolean
+    description: Holds the DA role in the protocol.
+
+  grounding:
+    type: object
+    required: [type]
+    properties:
+      type:
+        enum: [natal_chart, synthetic]
+      source_figure:
+        type: [string, "null"]
+      birth:
+        type: object
+        required: [date, time, time_known, place, coordinates]
+        properties:
+          date:
+            type: string
+            pattern: "^\\d{4}-\\d{2}-\\d{2}$"
+          time:
+            type: string
+            pattern: "^\\d{2}:\\d{2}$"
+          time_known:
+            type: boolean
+          place:
+            type: string
+          coordinates:
+            type: array
+            items: { type: number }
+            minItems: 2
+            maxItems: 2
+
+  chart_signature:
+    # Present only if grounding.type == natal_chart
+    type: object
+    required:
+      - sun
+      - moon
+      - dominant_element
+      - dominant_modality
+      - archetype_summary
+    properties:
+      sun:
+        enum: [aries, taurus, gemini, cancer, leo, virgo,
+               libra, scorpio, sagittarius, capricorn, aquarius, pisces]
+      moon:
+        enum: [aries, taurus, gemini, cancer, leo, virgo,
+               libra, scorpio, sagittarius, capricorn, aquarius, pisces]
+      ascendant:
+        # Optional — only if time_known
+        type: [string, "null"]
+        enum: [aries, taurus, gemini, cancer, leo, virgo,
+               libra, scorpio, sagittarius, capricorn, aquarius, pisces, null]
+      dominant_element:
+        type: string
+        description: |
+          fire | earth | air | water | or a compound like "mutable_fire_earth"
+          for charts where dominance is split.
+      dominant_modality:
+        enum: [cardinal, fixed, mutable]
+      key_aspects:
+        type: array
+        items: { type: string }
+      archetype_summary:
+        type: string
+        maxLength: 200
+      rodden_rating:
+        # Provenance of the birth data. AA = birth certificate, A = from
+        # memory of family/friend, B = biography, C = caution/no source,
+        # DD = dirty data, X = no time available.
+        type: string
+        enum: [AA, A, B, C, DD, X]
+      rodden_source:
+        type: string
+        description: Where the birth data came from (collection, biographer, etc).
+
+  worldview:
+    type: object
+    required:
+      - time_horizon
+      - risk_appetite
+      - optimization_target
+      - evidence_weight
+      - decision_speed
+      - failure_response
+      - primary_lens
+    properties:
+      time_horizon:
+        enum: [short, medium, long]
+      risk_appetite:
+        enum: [low, medium, high]
+      optimization_target:
+        enum: [growth, margin, durability, speed, learning, quality]
+      evidence_weight:
+        enum: [empirical, conceptual, intuitive]
+      decision_speed:
+        enum: [snap, deliberate, exhaustive]
+      failure_response:
+        enum: [pivot, harden, escalate, quit]
+      primary_lens:
+        enum: [operations, story, numbers, tech, customer, regulation]
+
+  voice:
+    type: object
+    required: [sentence_length, register]
+    properties:
+      sentence_length:
+        enum: [short, medium, long]
+      register:
+        type: string
+      forbidden_phrases:
+        type: array
+        items: { type: string }
+      signature_phrases:
+        type: array
+        items: { type: string }
+      redaction_aliases:
+        type: array
+        items: { type: string }
+        description: Additional terms to redact when anonymizing this seat's outputs.
+
+  protocol:
+    type: object
+    required: [recalibration_factor]
+    properties:
+      sealed_opening_max_words:
+        type: integer
+        minimum: 50
+        maximum: 500
+        default: 200
+      rebuttal_max_words:
+        type: integer
+        minimum: 30
+        maximum: 300
+        default: 150
+      recalibration_factor:
+        type: number
+        minimum: 0.5
+        maximum: 1.0
+        description: |
+          Multiplier applied to confidence_raw to discount systemic overconfidence.
+          Lower = more discount. 0.8 default, 0.95 for cautious personas,
+          0.70 for highly uncalibrated ones.
+
+  must_produce:
+    type: array
+    items: { type: string }
+    description: Structural outputs the seat must include in every applicable turn.
+
+  must_not:
+    type: array
+    items: { type: string }
+    description: Behaviors the seat must avoid.
+
+  provenance:
+    type: object
+    required:
+      - built_by
+      - built_at
+      - reviewed_by
+      - reviewed_at
+      - file_version
+    properties:
+      built_by: { type: string }
+      built_at: { type: string, format: date-time }
+      reviewed_by: { type: string }
+      reviewed_at: { type: string, format: date-time }
+      file_version:
+        type: string
+        pattern: "^\\d+\\.\\d+\\.\\d+$"
