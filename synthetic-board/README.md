@@ -24,13 +24,20 @@ The research backing this design is collected in `docs/02-architecture.md`. The 
 └── tests/                  Tests and the A/B eval harness.
 ```
 
-## Quick start (once built)
+## Quick start
 
 ```bash
-uv sync
+uv sync                       # or: pip install -e ".[dev]"
+
+# convene runs against deterministic mocks — no API key needed (tasks 1–9).
+sboard convene tests/fixtures/petitions/01-iso-compliance.json
+# → writes out/<memo_id>.md + .json, persists the audit trail to runs/sboard.db
+
+sboard inspect <memo_id>      # show the memo and its full transcript
+
+# The A/B harness (Task 10) is the first command that needs a live key:
 export ANTHROPIC_API_KEY=...
-sboard convene tests/fixtures/petitions/example.json
-sboard ab tests/fixtures/petitions/example.json
+sboard ab tests/fixtures/petitions/01-iso-compliance.json   # not yet implemented
 ```
 
 ## Status

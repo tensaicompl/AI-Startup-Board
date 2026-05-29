@@ -61,6 +61,11 @@ target-version = "py311"
 select = ["E", "F", "I", "N", "W", "B", "C90", "UP", "SIM", "RET"]
 ignore = ["E501"]  # line length handled by formatter
 
+[tool.ruff.lint.flake8-bugbear]
+# Typer relies on calling Argument()/Option() in parameter defaults; these are
+# the framework's declarative API, not mutable-default bugs.
+extend-immutable-calls = ["typer.Argument", "typer.Option"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = "test_*.py"
