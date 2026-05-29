@@ -35,14 +35,23 @@ sboard convene tests/fixtures/petitions/01-iso-compliance.json
 
 sboard inspect <memo_id>      # show the memo and its full transcript
 
-# The A/B harness (Task 10) is the first command that needs a live key:
+# A/B gate — runs the board AND a single-LLM baseline, writes a blind rater
+# bundle (anonymized A.md/B.md + rating.csv) to tests/ab/runs/<petition_id>/.
+# Works against mocks with no key:
+sboard ab tests/fixtures/petitions/01-iso-compliance.json
+
+# The live gate is the first thing that needs a real key:
 export ANTHROPIC_API_KEY=...
-sboard ab tests/fixtures/petitions/01-iso-compliance.json   # not yet implemented
+sboard ab tests/fixtures/petitions/01-iso-compliance.json --live
+
+# After raters fill the rating.csv files, tally the gate:
+python tests/ab/score.py        # → mean board vs baseline, PASS / MARGINAL / FAIL
 ```
 
 ## Status
 
-Pre-build. Specs frozen. Build instructions are in `HANDOFF.md`.
+MVP build complete (Tasks 1–10). The live A/B gate run is the remaining step and
+needs `ANTHROPIC_API_KEY` plus the 20-petition test set (HANDOFF §9).
 
 ## License & IP note
 

@@ -5,8 +5,9 @@ from __future__ import annotations
 import json
 import os
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, cast
 
+import anthropic
 from pydantic import BaseModel
 
 
@@ -314,6 +315,9 @@ class MockClient(AnthropicClient):
         if stage == "memo_synthesis":
             return self._generate_mock_memo()
 
+        if stage == "baseline":
+            return self._generate_mock_baseline()
+
         raise ValueError(f"Unknown stage: {stage}")
 
     def _generate_mock_memo(self) -> dict[str, Any]:
@@ -333,3 +337,120 @@ class MockClient(AnthropicClient):
                 "market proves valuable."
             ),
         }
+
+    def _generate_mock_baseline(self) -> dict[str, Any]:
+        """A plausible single-LLM memo. Deliberately a fair competitor — the gate
+        is only honest if the baseline can win, so this is not weakened."""
+        return {
+            "verdict": "conditional",
+            "verdict_reasoning": (
+                "There is a real regulatory driver here and a credible team, and the "
+                "CEE localization angle is a reasonable wedge against US incumbents. "
+                "But with zero paid customers the willingness to pay is unproven, and "
+                "an enterprise sales motion on eighteen months of runway is tight. On "
+                "balance this is worth continuing only if commercial traction appears "
+                "quickly, so the verdict is conditional rather than a clear proceed."
+            ),
+            "dissent_summary": (
+                "The case for a clean proceed is that the regulatory deadline is a hard "
+                "forcing function and the founder pairing of auditor plus engineer is "
+                "well matched to the problem; waiting for paid proof may simply cede "
+                "the timing advantage to faster-moving competitors."
+            ),
+            "kill_criteria": [
+                {
+                    "criterion": "No pilot converts to a paid annual contract within six months of launch.",
+                    "owner_to_monitor": "Founder",
+                },
+                {
+                    "criterion": "Blended CAC exceeds 1500 EUR per customer by month nine.",
+                    "owner_to_monitor": "Founder",
+                },
+            ],
+            "next_action": {
+                "action": "Convert at least one pilot to a paid contract within 60 days.",
+                "owner": "Founder",
+                "deadline": "2026-07-31",
+            },
+            "confidence": 0.62,
+        }
+
+
+class LiveAnthropicClient(AnthropicClient):
+    """Real Anthropic client. Forces schema-valid structured output via tool-use.
+
+    This is the first component that needs a live ANTHROPIC_API_KEY (Task 10).
+    It is never exercised by the mock-based build tests; its control flow is
+    covered by a test that patches `messages.create`.
+    """
+
+    def __init__(
+        self,
+        api_key: str | None = None,
+        *,
+        seat_model: str | None = None,
+        synthesis_model: str | None = None,
+    ) -> None:
+        key = api_key or os.environ.get("ANTHROPIC_API_KEY")
+        if not key:
+            raise RuntimeError(
+                "ANTHROPIC_API_KEY is not set; it is required for live runs. "
+                "Set it in the environment or pass api_key explicitly."
+            )
+        self._client = anthropic.Anthropic(api_key=key)
+        self._seat_model = seat_model or os.environ.get("SBOARD_SEAT_MODEL", "claude-opus-4-7")
+        self._synthesis_model = synthesis_model or os.environ.get(
+            "SBOARD_SYNTHESIS_MODEL", "claude-sonnet-4-6"
+        )
+
+    def call(
+        self,
+        *,
+        system_prompt: str,
+        user_message: str,
+        output_schema: type[BaseModel],
+        seat_id: str,
+        stage: str,
+        model: str | None = None,
+        max_tokens: int = 2000,
+    ) -> LLMResponse:
+        model_id = model or self._seat_model
+        tool = {
+            "name": "emit_structured_output",
+            "description": (
+                "Return the result as a single structured object conforming exactly "
+                "to the provided JSON schema. Populate every required field."
+            ),
+            "input_schema": output_schema.model_json_schema(),
+        }
+        response = self._client.messages.create(
+            model=model_id,
+            max_tokens=max_tokens,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_message}],
+            tools=[cast("Any", tool)],
+            tool_choice={"type": "tool", "name": "emit_structured_output"},
+        )
+
+        tool_input: dict[str, Any] | None = None
+        for block in response.content:
+            if block.type == "tool_use":
+                tool_input = cast("dict[str, Any]", block.input)
+                break
+        if tool_input is None:
+            raise ValueError(
+                f"No tool_use block in response (seat={seat_id}, stage={stage})"
+            )
+
+        return LLMResponse(
+            content=json.dumps(tool_input),
+            model=response.model,
+            input_tokens=response.usage.input_tokens,
+            output_tokens=response.usage.output_tokens,
+        )
+
+    def get_default_seat_model(self) -> str:
+        return self._seat_model
+
+    def get_default_synthesis_model(self) -> str:
+        return self._synthesis_model

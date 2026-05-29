@@ -31,7 +31,7 @@ from sboard.db.store import (
 )
 from sboard.memo.formatter import format_memo_markdown
 from sboard.schemas import Memo, Petition
-from sboard.seats.llm_client import AnthropicClient, MockClient
+from sboard.seats.llm_client import AnthropicClient, LiveAnthropicClient, MockClient
 from sboard.seats.persona_loader import load_all_personas
 
 # Defaults are cwd-relative so the documented `sboard convene tests/...` usage
@@ -62,6 +62,15 @@ class Inspection:
     memo: Memo
     petition: Petition | None
     transcript: list[dict[str, Any]]
+
+
+def make_client(*, live: bool = False) -> AnthropicClient:
+    """Construct the LLM client. Mock by default (keyless); live needs a key.
+
+    `LiveAnthropicClient()` raises if ANTHROPIC_API_KEY is unset, so it is only
+    constructed when explicitly requested.
+    """
+    return LiveAnthropicClient() if live else MockClient()
 
 
 def load_petition(path: Path) -> Petition:

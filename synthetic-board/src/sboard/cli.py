@@ -12,6 +12,14 @@ from pathlib import Path
 import typer
 
 from sboard import service
+from sboard.ab import (
+    DEFAULT_AB_SEED,
+    DEFAULT_MASTER_DIR,
+    DEFAULT_RUNS_DIR,
+    ABError,
+    run_ab,
+)
+from sboard.baseline import BaselineError
 
 app = typer.Typer(
     name="sboard",
@@ -113,14 +121,86 @@ def inspect(
 
 
 @app.command()
-def ab(petition: str = typer.Argument(..., help="Path to petition JSON file")) -> None:
+def ab(
+    petition: Path = typer.Argument(
+        ...,
+        exists=True,
+        dir_okay=False,
+        readable=True,
+        help="Path to petition JSON file",
+    ),
+    runs_dir: Path = typer.Option(
+        DEFAULT_RUNS_DIR,
+        "--runs-dir",
+        envvar="SBOARD_AB_RUNS",
+        help="Where the blind rater bundle is written.",
+    ),
+    master_dir: Path = typer.Option(
+        DEFAULT_MASTER_DIR,
+        "--master-dir",
+        envvar="SBOARD_AB_MASTER",
+        help="Where the A/B → pipeline master mapping is written (admin only).",
+    ),
+    db: Path = typer.Option(
+        service.DEFAULT_DB_PATH, "--db", envvar="SBOARD_DB", help="Audit database."
+    ),
+    personas: Path = typer.Option(
+        service.DEFAULT_PERSONAS_DIR,
+        "--personas",
+        envvar="SBOARD_PERSONAS",
+        help="Directory of persona .md files for the board seats.",
+    ),
+    seed: int = typer.Option(service.DEFAULT_SEED, "--seed", help="Board protocol seed."),
+    ab_seed: int = typer.Option(
+        DEFAULT_AB_SEED, "--ab-seed", help="Seed for blind A/B label assignment."
+    ),
+    live: bool = typer.Option(
+        False,
+        "--live/--mock",
+        help="Use the real Anthropic API (needs ANTHROPIC_API_KEY) instead of mocks.",
+    ),
+) -> None:
     """Run board + baseline on the same petition for blind A/B comparison."""
+    try:
+        client = service.make_client(live=live)
+    except RuntimeError as exc:
+        typer.secho(str(exc), fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=2) from exc
+
+    try:
+        result = run_ab(
+            petition,
+            personas_dir=personas,
+            runs_dir=runs_dir,
+            master_dir=master_dir,
+            db_path=db,
+            seed=seed,
+            ab_seed=ab_seed,
+            client=client,
+        )
+    except (ABError, BaselineError, FileNotFoundError) as exc:
+        typer.secho(f"A/B run failed: {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1) from exc
+
     typer.secho(
-        "`sboard ab` arrives in Task 10 (the A/B harness); not implemented yet.",
-        fg=typer.colors.YELLOW,
-        err=True,
+        f"✓ A/B bundle written for petition {result.petition_id}",
+        fg=typer.colors.GREEN,
     )
-    raise typer.Exit(code=2)
+    typer.echo(
+        f"  Rater bundle: {result.run_dir}/  "
+        "(A.md, B.md, petition.md, rating.csv, HOW_TO_RATE.md)"
+    )
+    typer.echo(
+        f"  Master map:   {result.master_path}  "
+        "(admin only — never share with raters)"
+    )
+    typer.echo(f"  Audit DB:     {db}")
+    typer.echo("  Tally later:  python tests/ab/score.py")
+    if not live:
+        typer.secho(
+            "  (ran with mocks; pass --live with ANTHROPIC_API_KEY for the real gate)",
+            fg=typer.colors.YELLOW,
+        )
 
 
 if __name__ == "__main__":

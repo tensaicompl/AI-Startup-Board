@@ -85,7 +85,7 @@ def _build_next_action(state: MeetingState) -> NextAction:
     if verdict == Position.KILL:
         action = "Document learnings and archive this concept before exploring alternatives."
     elif verdict == Position.CONDITIONAL:
-        action = "Validate the top kill criterion within 30 days and report back to the board."
+        action = "Validate the top kill criterion within 30 days and report back at the next review."
     else:
         action = "Proceed to detailed planning with a 30-day milestone review checkpoint."
 

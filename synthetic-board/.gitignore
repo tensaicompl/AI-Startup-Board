@@ -49,6 +49,7 @@ htmlcov/
 out/
 runs/
 tests/ab/runs/
+tests/ab/master/
 
 # OS
 .DS_Store
