@@ -9,7 +9,6 @@ from typing import Any
 from sboard.schemas import SealedOpening
 from sboard.seats.persona_loader import Persona
 
-
 LABELS = ["Seat A", "Seat B", "Seat C"]
 
 
@@ -21,7 +20,7 @@ def build_anonymization_map(
     rng = random.Random(seed)
     labels = list(LABELS[: len(seat_ids)])
     rng.shuffle(labels)
-    return dict(zip(seat_ids, labels))
+    return dict(zip(seat_ids, labels, strict=True))
 
 
 def reverse_map(anon_map: dict[str, str]) -> dict[str, str]:

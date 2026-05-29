@@ -4,38 +4,37 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
 # --- Enums ---
 
-class MeetingType(str, Enum):
+class MeetingType(StrEnum):
     IDEA_SCREEN = "idea_screen"
 
 
-class Position(str, Enum):
+class Position(StrEnum):
     PROCEED = "proceed"
     KILL = "kill"
     CONDITIONAL = "conditional"
 
 
-class MajorityTrend(str, Enum):
+class MajorityTrend(StrEnum):
     PROCEED = "proceed"
     KILL = "kill"
     CONDITIONAL = "conditional"
     SPLIT = "split"
 
 
-class Agreement(str, Enum):
+class Agreement(StrEnum):
     AGREE = "agree"
     DISAGREE = "disagree"
     UNDECIDED = "undecided"
 
 
-class MemoSource(str, Enum):
+class MemoSource(StrEnum):
     BOARD = "board"
     BASELINE = "baseline"
 

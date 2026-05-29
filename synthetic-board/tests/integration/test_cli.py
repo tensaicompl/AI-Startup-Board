@@ -21,7 +21,22 @@ PERSONAS_DIR = ROOT / "personas"
 PETITION_01 = ROOT / "tests" / "fixtures" / "petitions" / "01-iso-compliance.json"
 
 # Source-figure tokens that must never appear in any user-visible string (HANDOFF §8).
-FORBIDDEN_NAMES = ["Welch", "Buffett", "Grove", "Munger", "John Francis", "Warren"]
+# Names, nicknames, companies, and birthplaces of the two charted source figures
+# (J.F. "Jack" Welch — General Electric, Peabody MA; Warren Buffett — Berkshire
+# Hathaway, Omaha NE), plus the Outsider's synthetic alias.
+FORBIDDEN_NAMES = [
+    "Welch",
+    "Buffett",
+    "Jack",
+    "Warren",
+    "Marek",
+    "Berkshire",
+    "General Electric",
+    "GE",
+    "Peabody",
+    "Omaha",
+    "Hathaway",
+]
 
 runner = CliRunner()
 

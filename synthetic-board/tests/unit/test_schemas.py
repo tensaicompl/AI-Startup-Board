@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import date, datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -13,23 +12,15 @@ from sboard.schemas import (
     AnonymizedReview,
     DevilsAdvocateOutput,
     ForcedDissent,
-    KillCriterion,
-    Memo,
-    MemoMetadata,
-    MemoModelIds,
-    MemoSource,
     MeetingType,
-    NextAction,
+    Memo,
+    MemoSource,
     Petition,
-    PetitionConstraints,
     Position,
     Rebuttal,
-    ReviewItem,
     SealedOpening,
-    Signature,
     Vote,
 )
-
 
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures" / "petitions"
 
@@ -72,21 +63,21 @@ def test_petition_fixture_files() -> None:
 def test_petition_rejects_short_pitch() -> None:
     data = _make_petition_dict()
     data["pitch"] = "too short"
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError):
         Petition.model_validate(data)
 
 
 def test_petition_rejects_bad_meeting_type() -> None:
     data = _make_petition_dict()
     data["meeting_type"] = "pre_mortem"
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError):
         Petition.model_validate(data)
 
 
 def test_petition_rejects_extra_fields() -> None:
     data = _make_petition_dict()
     data["rogue_field"] = "should fail"
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError):
         Petition.model_validate(data)
 
 
@@ -121,7 +112,7 @@ def test_sealed_opening_roundtrip() -> None:
 def test_sealed_opening_rejects_wrong_reason_count() -> None:
     data = _sealed_opening_dict()
     data["top_three_reasons"] = ["Only one reason here but it is long enough"]
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError):
         SealedOpening.model_validate(data)
 
 
@@ -160,7 +151,7 @@ def test_anonymized_review_rejects_bad_label() -> None:
             }
         ],
     }
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError):
         AnonymizedReview.model_validate(data)
 
 
@@ -188,7 +179,7 @@ def test_rebuttal_requires_reason_on_change() -> None:
         "change_reason": None,
         "rebuttal_text": "C" * 100,
     }
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError):
         Rebuttal.model_validate(data)
 
 
@@ -241,7 +232,7 @@ def test_vote_rejects_confidence_over_1() -> None:
         "confidence_raw": 1.5,
         "one_sentence_rationale": "Confidence should not exceed one point zero ever.",
     }
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError):
         Vote.model_validate(data)
 
 
@@ -341,14 +332,14 @@ def test_memo_roundtrip() -> None:
 def test_memo_rejects_empty_kill_criteria() -> None:
     data = _make_memo_dict()
     data["kill_criteria"] = []
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError):
         Memo.model_validate(data)
 
 
 def test_memo_rejects_bad_protocol_version() -> None:
     data = _make_memo_dict()
     data["protocol_version"] = "v1.0"
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError):
         Memo.model_validate(data)
 
 

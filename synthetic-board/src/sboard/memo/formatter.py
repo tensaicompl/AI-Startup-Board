@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from sboard.schemas import Memo
 
-
 SEAT_ID_TO_ROLE: dict[str, str] = {
     "operator-ceo": "Operator-CEO",
     "devils-advocate": "Devil's Advocate",

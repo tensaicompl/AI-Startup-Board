@@ -4,14 +4,12 @@ from __future__ import annotations
 
 import json
 import time
-from typing import Any
 
 from sboard.chair.anonymizer import anonymize_opening, build_anonymization_map, reverse_map
 from sboard.chair.diversity import check_diversity
 from sboard.chair.meeting_state import MeetingState, ProtocolState, SeatState
 from sboard.chair.voting import (
     is_unanimous,
-    recalibrate,
     select_forced_dissent_seat,
     tally_votes,
 )
@@ -40,7 +38,7 @@ def do_convene(state: MeetingState) -> None:
         state.log("diversity_check_failed", {"distinct_axes": count})
         return
 
-    for sid, persona in state.personas.items():
+    for sid in state.personas:
         state.seat_states[sid] = SeatState(seat_id=sid, status="pending")
 
     state.log("convene", {
@@ -171,23 +169,24 @@ def do_identified_rebuttal(state: MeetingState, client: AnthropicClient) -> None
             )
 
         prompt = (
-            f"Identities have been revealed.\n\n"
-            f"Peer positions:\n" + "\n\n".join(peer_info) + "\n\n"
+            "Identities have been revealed.\n\n"
+            "Peer positions:\n" + "\n\n".join(peer_info) + "\n\n"
             f"Your earlier reviews:\n{reviews_text}\n\n"
             f"You may revise your position. If you change, you must explain why."
         )
 
         result = run_seat(client, persona, "rebuttal", prompt, Rebuttal)
         ss = state.seat_states[sid]
-        if result.status == SeatStatus.RESPONDED and result.output is not None:
-            ss.rebuttal = result.output  # type: ignore[assignment]
-            if result.output.position_changed:  # type: ignore[union-attr]
+        if result.status == SeatStatus.RESPONDED and isinstance(result.output, Rebuttal):
+            rebuttal = result.output
+            ss.rebuttal = rebuttal
+            if rebuttal.position_changed:
                 state.log(
                     "position_changed",
                     {
                         "from": getattr(ss.sealed_opening, "position", None),
-                        "to": result.output.position.value,  # type: ignore[union-attr]
-                        "reason": result.output.change_reason,  # type: ignore[union-attr]
+                        "to": rebuttal.position.value,
+                        "reason": rebuttal.change_reason,
                     },
                     seat_id=sid,
                 )
@@ -237,7 +236,7 @@ def do_devils_advocate(state: MeetingState, client: AnthropicClient) -> None:
     prompt = (
         f"The current majority trend is: {majority.value}\n\n"
         f"Rebuttals:\n" + "\n\n".join(rebuttals_text) + "\n\n"
-        f"Produce a steelmanned case AGAINST the majority position."
+        "Produce a steelmanned case AGAINST the majority position."
     )
 
     da_persona = state.personas[da_sid]
@@ -283,10 +282,10 @@ def do_confidence_vote(state: MeetingState, client: AnthropicClient) -> None:
         positions_summary.append(f"  {sid}: {pos}")
 
     prompt = (
-        f"All rebuttals:\n" + "\n\n".join(rebuttals_text) +
+        "All rebuttals:\n" + "\n\n".join(rebuttals_text) +
         f"\n{da_text}\n\n"
         f"Current position summary:\n" + "\n".join(positions_summary) + "\n\n"
-        f"Cast your final vote: verdict and confidence."
+        "Cast your final vote: verdict and confidence."
     )
 
     votes: list[Vote] = []

@@ -14,7 +14,6 @@ from sboard.schemas import Petition, Position
 from sboard.seats.llm_client import MockClient
 from sboard.seats.persona_loader import Persona, load_all_personas
 
-
 PERSONAS_DIR = Path(__file__).parent.parent.parent / "personas"
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures" / "petitions"
 
@@ -106,15 +105,14 @@ def test_different_seeds_may_differ(
     petition: Petition, personas: dict[str, Persona], mock_client: MockClient
 ) -> None:
     """Different seeds should (likely) produce different maps."""
-    m1 = _make_meeting(petition, personas, seed=1)
-    r1 = run_meeting(m1, mock_client)
-
-    m2 = _make_meeting(petition, personas, seed=2)
-    r2 = run_meeting(m2, mock_client)
-
-    # With 3 items, 1/6 chance of same shuffle — but two specific seeds should differ
-    # This is a probabilistic test; if it ever flakes, pin to known-different seeds
-    assert r1.anonymization_map != r2.anonymization_map or True  # soft assert
+    # Deterministic over a fixed seed range rather than a flaky two-seed compare:
+    # any single shuffle could coincide, but not all of them across 8 seeds.
+    maps = [
+        run_meeting(_make_meeting(petition, personas, seed=s), mock_client).anonymization_map
+        for s in range(8)
+    ]
+    distinct = {tuple(sorted(m.items())) for m in maps}
+    assert len(distinct) > 1
 
 
 def test_unanimous_vote_triggers_forced_dissent(

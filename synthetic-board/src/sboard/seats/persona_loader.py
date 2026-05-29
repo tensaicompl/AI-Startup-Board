@@ -4,32 +4,32 @@ from __future__ import annotations
 
 import hashlib
 import re
-from dataclasses import dataclass, field
-from enum import Enum
+from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
 import yaml
 
 
-class GroundingType(str, Enum):
+class GroundingType(StrEnum):
     NATAL_CHART = "natal_chart"
     SYNTHETIC = "synthetic"
 
 
-class TimeHorizon(str, Enum):
+class TimeHorizon(StrEnum):
     SHORT = "short"
     MEDIUM = "medium"
     LONG = "long"
 
 
-class RiskAppetite(str, Enum):
+class RiskAppetite(StrEnum):
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
 
 
-class OptimizationTarget(str, Enum):
+class OptimizationTarget(StrEnum):
     GROWTH = "growth"
     MARGIN = "margin"
     DURABILITY = "durability"
@@ -38,26 +38,26 @@ class OptimizationTarget(str, Enum):
     QUALITY = "quality"
 
 
-class EvidenceWeight(str, Enum):
+class EvidenceWeight(StrEnum):
     EMPIRICAL = "empirical"
     CONCEPTUAL = "conceptual"
     INTUITIVE = "intuitive"
 
 
-class DecisionSpeed(str, Enum):
+class DecisionSpeed(StrEnum):
     SNAP = "snap"
     DELIBERATE = "deliberate"
     EXHAUSTIVE = "exhaustive"
 
 
-class FailureResponse(str, Enum):
+class FailureResponse(StrEnum):
     PIVOT = "pivot"
     HARDEN = "harden"
     ESCALATE = "escalate"
     QUIT = "quit"
 
 
-class PrimaryLens(str, Enum):
+class PrimaryLens(StrEnum):
     OPERATIONS = "operations"
     STORY = "story"
     NUMBERS = "numbers"
@@ -161,7 +161,9 @@ def _split_frontmatter(raw: str) -> tuple[str, str]:
     return yaml_str, body
 
 
-def _validate_frontmatter(fm: dict[str, Any]) -> None:
+# Flat field-by-field validation of the persona schema; the branch count is
+# inherent to the number of fields validated. Kept as one cohesive validator.
+def _validate_frontmatter(fm: dict[str, Any]) -> None:  # noqa: C901
     """Validate frontmatter against the persona schema."""
     required = [
         "seat_id", "role", "voting", "voting_weight", "permanent",

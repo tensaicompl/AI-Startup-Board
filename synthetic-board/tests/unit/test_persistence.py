@@ -13,7 +13,6 @@ from sboard.chair.meeting_state import MeetingState
 from sboard.chair.state_machine import run_meeting
 from sboard.db.store import (
     get_memo,
-    get_memo_by_petition,
     get_petition,
     get_transcript,
     init_db,
@@ -21,10 +20,9 @@ from sboard.db.store import (
     insert_petition,
     insert_transcript,
 )
-from sboard.schemas import Memo, Petition
+from sboard.schemas import Petition
 from sboard.seats.llm_client import MockClient
 from sboard.seats.persona_loader import Persona, load_all_personas
-
 
 PERSONAS_DIR = Path(__file__).parent.parent.parent / "personas"
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures" / "petitions"

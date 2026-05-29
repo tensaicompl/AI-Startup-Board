@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from sboard.schemas import (
@@ -21,7 +21,7 @@ from sboard.schemas import (
 from sboard.seats.persona_loader import Persona
 
 
-class ProtocolState(str, Enum):
+class ProtocolState(StrEnum):
     CONVENE = "CONVENE"
     SEALED_OPENING = "SEALED_OPENING"
     ANONYMIZED_REVEAL = "ANONYMIZED_REVEAL"

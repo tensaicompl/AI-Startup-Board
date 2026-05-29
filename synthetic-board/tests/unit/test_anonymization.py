@@ -4,20 +4,18 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 import pytest
 from pydantic import BaseModel
 
-from sboard.chair.anonymizer import build_anonymization_map, redact_text, reverse_map
+from sboard.chair.anonymizer import redact_text, reverse_map
 from sboard.chair.meeting_state import MeetingState
 from sboard.chair.state_machine import run_meeting
 from sboard.schemas import Petition
 from sboard.seats.llm_client import AnthropicClient, LLMResponse, MockClient
 from sboard.seats.persona_loader import Persona, load_all_personas
-
 
 PERSONAS_DIR = Path(__file__).parent.parent.parent / "personas"
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures" / "petitions"

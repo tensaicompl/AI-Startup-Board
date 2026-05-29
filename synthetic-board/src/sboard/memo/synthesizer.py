@@ -2,30 +2,27 @@
 
 from __future__ import annotations
 
-import json
 import time
 import uuid
-from datetime import date, datetime, timezone
-from typing import Any
+from datetime import UTC, date, datetime
+from typing import Annotated
 
 from pydantic import BaseModel, Field
-from typing import Annotated
 
 from sboard.chair.meeting_state import MeetingState
 from sboard.chair.voting import recalibrate
 from sboard.schemas import (
     KillCriterion,
+    MeetingType,
     Memo,
     MemoMetadata,
     MemoModelIds,
     MemoSource,
-    MeetingType,
     NextAction,
     Position,
     Signature,
 )
 from sboard.seats.llm_client import AnthropicClient
-
 
 MEMO_BODY_WORD_LIMIT = 500
 
@@ -245,7 +242,7 @@ def synthesize_memo(
         petition_id=state.petition.petition_id,
         meeting_type=MeetingType.IDEA_SCREEN,
         protocol_version=state.protocol_version,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
         source=MemoSource.BOARD,
         verdict=state.final_verdict or Position.CONDITIONAL,
         confidence_weighted=round(state.confidence_weighted, 4),

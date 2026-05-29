@@ -7,7 +7,7 @@ Every edge is a code-level guard. No transition asks a model for judgment.
 from __future__ import annotations
 
 import time
-from typing import Any, TypedDict
+from typing import TypedDict, cast
 
 from langgraph.graph import END, START, StateGraph
 
@@ -29,7 +29,10 @@ class GraphState(TypedDict):
     meeting: MeetingState
 
 
-def _build_graph(client: AnthropicClient) -> StateGraph:
+# Declarative graph wiring: one closure per protocol node plus routing guards.
+# The branch count is inherent to enumerating the state machine; splitting it
+# would scatter the protocol spine across helpers and hurt readability.
+def _build_graph(client: AnthropicClient) -> StateGraph[GraphState]:  # noqa: C901
     """Build the Idea Screen state machine graph."""
 
     def convene(state: GraphState) -> GraphState:
@@ -134,4 +137,4 @@ def run_meeting(
 
     initial: GraphState = {"meeting": meeting_state}
     result = compiled.invoke(initial)
-    return result["meeting"]
+    return cast(MeetingState, result["meeting"])

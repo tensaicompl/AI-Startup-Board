@@ -16,7 +16,6 @@ from sboard.schemas import Memo, Petition
 from sboard.seats.llm_client import AnthropicClient, LLMResponse, MockClient
 from sboard.seats.persona_loader import Persona, load_all_personas
 
-
 PERSONAS_DIR = Path(__file__).parent.parent.parent / "personas"
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures" / "petitions"
 
@@ -121,7 +120,7 @@ def test_kill_criteria_from_seat_openings(
     assert memo is not None
 
     all_seat_criteria: set[str] = set()
-    for sid, ss in result.seat_states.items():
+    for ss in result.seat_states.values():
         if ss.sealed_opening:
             all_seat_criteria.update(ss.sealed_opening.kill_criteria)
     if result.devils_advocate_output:

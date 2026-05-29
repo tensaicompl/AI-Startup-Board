@@ -18,8 +18,7 @@ from sboard.schemas import (
 )
 from sboard.seats.llm_client import LLMResponse, MockClient
 from sboard.seats.persona_loader import load_persona
-from sboard.seats.seat import SeatResult, SeatStatus, run_seat
-
+from sboard.seats.seat import SeatStatus, run_seat
 
 PERSONAS_DIR = Path(__file__).parent.parent.parent / "personas"
 

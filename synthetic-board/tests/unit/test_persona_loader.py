@@ -8,12 +8,10 @@ import pytest
 
 from sboard.seats.persona_loader import (
     GroundingType,
-    Persona,
     PersonaValidationError,
     load_all_personas,
     load_persona,
 )
-
 
 PERSONAS_DIR = Path(__file__).parent.parent.parent / "personas"
 
