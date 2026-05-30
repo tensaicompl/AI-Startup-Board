@@ -32,6 +32,7 @@ Triggered only by Phase 1 pass.
 - Multi-tenant.
 - Founder-level persistence (their own boards, their own memos).
 - Audit export for investors / advisors.
+- **Enforce cost caps.** Today the soft/hard caps in the protocol YAMLs (v2: soft $12 / hard $40) are *tracked* only — `total_llm_cost_usd` accumulates and is recorded in memo metadata, but nothing aborts a meeting that crosses them. Fine for MVP (the gate runs are small and supervised); for multi-tenant we need the chair to abort past the hard cap and flag past the soft cap. (Carried forward from Task v2.4 — the cost-cap-tracked-not-enforced call.)
 
 ## Phase 6 — Research
 - Model diversity: route seats to different providers (Anthropic / OpenAI / Google) to test whether model diversity adds to persona diversity.
