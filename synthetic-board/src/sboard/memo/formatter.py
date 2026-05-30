@@ -92,16 +92,33 @@ def _format_v1(memo: Memo) -> str:
     return "\n".join(lines)
 
 
+def _section(heading: str, gloss: str, body: str) -> list[str]:
+    """A body section with a heading, a one-line italic gloss for at-a-glance
+    orientation, then the prose."""
+    return [f"## {heading}", f"*{gloss}*", "", body, ""]
+
+
 def _format_v2(memo: MemoV2) -> str:
     """The five-stage v2 body, rendered in order (idea → verdict → vision →
-    dissent → gtm). Full word-budget/forbidden-token polish lands in v2.5."""
+    dissent → gtm). Each section carries a one-line italic gloss so the rater can
+    see the structure at a glance, and the GTM section's presence is explicit: a
+    full section when the verdict allows it, an "n/a — kill verdict" header when a
+    kill drops it."""
     lines = _header(memo)
-    lines.extend(["## Idea Analysis", "", memo.idea_analysis, ""])
-    lines.extend(["## Verdict Reasoning", "", memo.verdict_reasoning, ""])
-    lines.extend(["## Vision", "", memo.vision, ""])
-    lines.extend([f"## Dissent ({_role_name(memo.dissent_source)})", "", memo.dissent_summary, ""])
+    lines.extend(_section("Idea Analysis", "What the business actually is, beneath the pitch.", memo.idea_analysis))
+    lines.extend(_section("Verdict Reasoning", "Why the call lands where it does.", memo.verdict_reasoning))
+    lines.extend(_section("Vision", "The upside if it works.", memo.vision))
+    lines.extend(
+        _section(
+            f"Dissent ({_role_name(memo.dissent_source)})",
+            "The strongest case against the verdict.",
+            memo.dissent_summary,
+        )
+    )
     if memo.gtm_analysis is not None:
-        lines.extend(["## Go-to-Market", "", memo.gtm_analysis, ""])
+        lines.extend(_section("GTM Analysis", "How it reaches the market.", memo.gtm_analysis))
+    else:
+        lines.extend(["## GTM Analysis (n/a — kill verdict)", ""])
     lines.extend(_kill_next_signatures_metadata(memo))
     return "\n".join(lines)
 

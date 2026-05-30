@@ -28,6 +28,19 @@ from sboard.seats.llm_client import AnthropicClient
 
 MEMO_BODY_WORD_LIMIT = 500
 
+# v2 five-section body budgets (Task v2.5). Per-section budgets are enforced at the
+# schema boundary (right after the structured output validates); the combined cap is
+# enforced separately. The per-section budgets sum to exactly the combined cap, so a
+# kill memo (no GTM) tops out at 1000 words and a full memo at 1200.
+MEMO_V2_SECTION_WORD_LIMITS: dict[str, int] = {
+    "idea_analysis": 200,
+    "verdict_reasoning": 300,
+    "vision": 250,
+    "dissent_summary": 250,
+    "gtm_analysis": 200,
+}
+MEMO_V2_COMBINED_WORD_LIMIT = 1200
+
 
 class SynthesisOutput(BaseModel):
     """The only two fields the LLM writes. Everything else is code."""
@@ -355,27 +368,67 @@ def _assemble_gtm(state: MeetingState) -> str | None:
     return " ".join(parts)[:1600]
 
 
+def _v2_section_word_counts(out: SynthesisV2Output) -> dict[str, int]:
+    """Word count of each present body section. gtm_analysis is skipped when None
+    (a kill verdict drops it). Counting routes through `_count_words` so the
+    retry-path tests can rig the budget signal (Decision 005)."""
+    counts: dict[str, int] = {}
+    for field in MEMO_V2_SECTION_WORD_LIMITS:
+        value = getattr(out, field)
+        if value is not None:
+            counts[field] = _count_words(value)
+    return counts
+
+
+def _v2_within_budget(out: SynthesisV2Output) -> bool:
+    """True iff every present section is within its per-section budget (the
+    schema-boundary check) AND the combined body is within the 1,200-word cap (the
+    separate check)."""
+    counts = _v2_section_word_counts(out)
+    sections_ok = all(wc <= MEMO_V2_SECTION_WORD_LIMITS[field] for field, wc in counts.items())
+    combined_ok = sum(counts.values()) <= MEMO_V2_COMBINED_WORD_LIMIT
+    return sections_ok and combined_ok
+
+
 def synthesize_memo_v2(state: MeetingState, client: AnthropicClient) -> MemoV2:
     """Build a v2 memo: five body sections from one LLM call, structural fields by
-    code. gtm_analysis is present iff the verdict is not kill."""
+    code. gtm_analysis is present iff the verdict is not kill.
+
+    Word budgets mirror v1's discipline: validate the structured output, check the
+    per-section + combined budgets, and on an over-budget result retry exactly once
+    before raising MemoSynthesisError. The happy path is a single LLM call."""
     synthesis_model = client.get_default_synthesis_model()
     prompt = _build_synthesis_prompt_v2(state)
 
-    response = client.call(
-        system_prompt=(
-            "You are an advisory memo writer. Output valid JSON with the five body "
-            "fields. Write in a neutral, standalone advisor voice that never "
-            "references any board, panel, seats, voting, or internal process."
-        ),
-        user_message=prompt,
-        output_schema=SynthesisV2Output,
-        seat_id="synthesis",
-        stage="memo_synthesis_v2",
-        model=synthesis_model,
-        max_tokens=3000,
-    )
-    state.total_llm_cost_usd += response.cost_usd
-    out = SynthesisV2Output.model_validate(json.loads(response.content))
+    out: SynthesisV2Output | None = None
+    for attempt in range(2):
+        response = client.call(
+            system_prompt=(
+                "You are an advisory memo writer. Output valid JSON with the five body "
+                "fields. Write in a neutral, standalone advisor voice that never "
+                "references any board, panel, seats, voting, or internal process."
+            ),
+            user_message=prompt,
+            output_schema=SynthesisV2Output,
+            seat_id="synthesis",
+            stage="memo_synthesis_v2",
+            model=synthesis_model,
+            max_tokens=3000,
+        )
+        state.total_llm_cost_usd += response.cost_usd
+        candidate = SynthesisV2Output.model_validate(json.loads(response.content))
+        if _v2_within_budget(candidate):
+            out = candidate
+            break
+        if attempt == 0:
+            continue
+
+    if out is None:
+        raise MemoSynthesisError(
+            f"v2 synthesis exceeded its word budgets after 2 attempts "
+            f"(per-section {MEMO_V2_SECTION_WORD_LIMITS}, "
+            f"combined cap {MEMO_V2_COMBINED_WORD_LIMIT} words)"
+        )
 
     verdict = state.final_verdict or Position.CONDITIONAL
     # Conditional routing already gated GTM on verdict != kill; enforce the memo
