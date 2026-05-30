@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
@@ -72,6 +73,7 @@ VALID_ROLES = frozenset({
     "CFO",
     "CTO",
     "CMO",
+    "Growth Advisor",
     "Devil's Advocate",
     "Outsider",
 })
@@ -131,6 +133,8 @@ class Persona:
     voting_weight: float
     permanent: bool
     is_devils_advocate: bool
+    advisor: bool
+    gtm_only: bool
     grounding_type: GroundingType
     source_figure: str | None
     worldview: Worldview
@@ -184,6 +188,10 @@ def _validate_frontmatter(fm: dict[str, Any]) -> None:  # noqa: C901
 
     if not isinstance(fm["voting"], bool):
         raise PersonaValidationError("voting must be boolean")
+
+    for opt_bool in ("advisor", "gtm_only"):
+        if opt_bool in fm and not isinstance(fm[opt_bool], bool):
+            raise PersonaValidationError(f"{opt_bool} must be boolean")
 
     vw = fm["voting_weight"]
     if not isinstance(vw, (int, float)) or vw < 0.5 or vw > 1.5:
@@ -263,6 +271,8 @@ def load_persona(path: Path) -> Persona:
         voting_weight=float(fm["voting_weight"]),
         permanent=fm["permanent"],
         is_devils_advocate=fm["is_devils_advocate"],
+        advisor=bool(fm.get("advisor", False)),
+        gtm_only=bool(fm.get("gtm_only", False)),
         grounding_type=GroundingType(grounding["type"]),
         source_figure=grounding.get("source_figure"),
         worldview=Worldview(
@@ -302,8 +312,15 @@ def load_persona(path: Path) -> Persona:
     )
 
 
-def load_all_personas(directory: Path) -> dict[str, Persona]:
-    """Load all persona .md files from a directory, keyed by seat_id."""
+def load_all_personas(
+    directory: Path, seat_ids: Iterable[str] | None = None
+) -> dict[str, Persona]:
+    """Load persona .md files from a directory, keyed by seat_id.
+
+    If `seat_ids` is given, return only that roster (raising if any is missing).
+    This lets a meeting seat a specific cast — e.g. the v1 trio or the v2 seven —
+    rather than whatever files happen to be in the directory.
+    """
     personas: dict[str, Persona] = {}
     for path in sorted(directory.glob("*.md")):
         if path.name.startswith("_"):
@@ -312,4 +329,14 @@ def load_all_personas(directory: Path) -> dict[str, Persona]:
         if persona.seat_id in personas:
             raise PersonaValidationError(f"Duplicate seat_id: {persona.seat_id}")
         personas[persona.seat_id] = persona
-    return personas
+
+    if seat_ids is None:
+        return personas
+
+    wanted = set(seat_ids)
+    missing = sorted(wanted - personas.keys())
+    if missing:
+        raise PersonaValidationError(f"Requested seats not found: {missing}")
+    # Filter but keep the natural (filename-sorted) order, so a fixed seed shuffles
+    # the same roster identically regardless of how seat_ids was ordered.
+    return {sid: p for sid, p in personas.items() if sid in wanted}

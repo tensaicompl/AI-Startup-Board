@@ -42,6 +42,11 @@ DEFAULT_OUT_DIR = Path("out")
 DEFAULT_PERSONAS_DIR = Path("personas")
 DEFAULT_SEED = 42
 
+# The v1 Idea Screen cast. The personas/ directory now also holds the v2 seats;
+# until the protocol-driven seating lands (Task v2.4), the v1 entry points seat
+# exactly this trio rather than whatever files are present.
+V1_SEATS = ("operator-ceo", "devils-advocate", "outsider")
+
 
 class ConveneError(Exception):
     """A meeting could not produce a memo (no personas, or the protocol aborted)."""
@@ -121,9 +126,14 @@ def convene(
     client = client or MockClient()
 
     petition = load_petition(petition_path)
-    personas = load_all_personas(personas_dir)
-    if not personas:
+    all_personas = load_all_personas(personas_dir)
+    if not all_personas:
         raise ConveneError(f"No persona files found in {personas_dir}")
+    missing = [s for s in V1_SEATS if s not in all_personas]
+    if missing:
+        raise ConveneError(f"Missing required v1 seats {missing} in {personas_dir}")
+    # Preserve the directory's natural order (keeps the seeded anonymization stable).
+    personas = {sid: p for sid, p in all_personas.items() if sid in V1_SEATS}
 
     state = MeetingState(petition=petition, personas=personas, seed=seed)
     final = run_meeting(state, client)

@@ -82,7 +82,7 @@ class SpyClient(AnthropicClient):
 
 @pytest.fixture()
 def personas() -> dict[str, Persona]:
-    return load_all_personas(PERSONAS_DIR)
+    return load_all_personas(PERSONAS_DIR, seat_ids=("operator-ceo", "devils-advocate", "outsider"))
 
 
 @pytest.fixture()

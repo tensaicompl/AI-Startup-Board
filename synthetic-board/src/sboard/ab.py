@@ -34,7 +34,13 @@ from sboard.db.store import (
 from sboard.schemas import Memo, Petition
 from sboard.seats.llm_client import AnthropicClient, MockClient
 from sboard.seats.persona_loader import load_all_personas
-from sboard.service import DEFAULT_DB_PATH, DEFAULT_PERSONAS_DIR, DEFAULT_SEED, load_petition
+from sboard.service import (
+    DEFAULT_DB_PATH,
+    DEFAULT_PERSONAS_DIR,
+    DEFAULT_SEED,
+    V1_SEATS,
+    load_petition,
+)
 
 DEFAULT_RUNS_DIR = Path("tests/ab/runs")
 DEFAULT_MASTER_DIR = Path("tests/ab/master")
@@ -201,9 +207,12 @@ def _persist_ab(
 def _run_board(
     petition: Petition, personas_dir: Path, seed: int, client: AnthropicClient
 ) -> MeetingState:
-    personas = load_all_personas(personas_dir)
-    if not personas:
+    all_personas = load_all_personas(personas_dir)
+    if not all_personas:
         raise ABError(f"No persona files found in {personas_dir}")
+    if any(s not in all_personas for s in V1_SEATS):
+        raise ABError(f"Missing required v1 seats in {personas_dir}")
+    personas = {sid: p for sid, p in all_personas.items() if sid in V1_SEATS}
     state = MeetingState(petition=petition, personas=personas, seed=seed)
     try:
         final = run_meeting(state, client)

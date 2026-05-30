@@ -58,8 +58,16 @@ def test_load_outsider() -> None:
 
 def test_load_all_personas() -> None:
     personas = load_all_personas(PERSONAS_DIR)
-    assert len(personas) == 3
-    assert set(personas.keys()) == {"operator-ceo", "devils-advocate", "outsider"}
+    assert len(personas) == 7  # v1 trio + v2 four
+    assert set(personas.keys()) == {
+        "operator-ceo", "devils-advocate", "outsider",
+        "visionary", "technical", "growth-advisor", "marketing",
+    }
+
+
+def test_load_roster_subset() -> None:
+    trio = load_all_personas(PERSONAS_DIR, seat_ids=("operator-ceo", "devils-advocate", "outsider"))
+    assert set(trio) == {"operator-ceo", "devils-advocate", "outsider"}
 
 
 def test_system_prompt_is_markdown_body() -> None:

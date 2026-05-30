@@ -35,6 +35,7 @@ properties:
       - CFO
       - CTO
       - CMO
+      - Growth Advisor
       - Devil's Advocate
       - Outsider
     description: Functional role on the board.
@@ -56,6 +57,20 @@ properties:
   is_devils_advocate:
     type: boolean
     description: Holds the DA role in the protocol.
+
+  advisor:
+    type: boolean
+    default: false
+    description: >
+      v2: a non-voting advisor seat that participates broadly (idea analysis,
+      visionary pass, GTM) but casts no verdict vote. Optional; defaults false.
+
+  gtm_only:
+    type: boolean
+    default: false
+    description: >
+      v2: a non-voting seat that participates only in the GTM stage.
+      Optional; defaults false.
 
   grounding:
     type: object
