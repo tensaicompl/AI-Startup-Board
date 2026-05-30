@@ -1,10 +1,11 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://sboard.local/schemas/memo.schema.json",
-  "title": "BoardMemo",
-  "description": "The one-page signed board memo. The product of a meeting. Immutable once written.",
+  "title": "BoardMemoV2",
+  "description": "The v2 board memo: seven-seat deliberation, five-stage body. Default schema. Immutable once written. v1 memos are preserved at memo-v1.schema.json.",
   "type": "object",
   "required": [
+    "schema_version",
     "memo_id",
     "petition_id",
     "meeting_type",
@@ -14,7 +15,9 @@
     "verdict",
     "confidence_weighted",
     "confidence_spread",
+    "idea_analysis",
     "verdict_reasoning",
+    "vision",
     "dissent_summary",
     "dissent_source",
     "kill_criteria",
@@ -23,60 +26,63 @@
     "metadata"
   ],
   "properties": {
-
-    "memo_id": {
-      "type": "string",
-      "format": "uuid"
+    "schema_version": {
+      "const": "2.0",
+      "description": "Memo schema version discriminator. v2 = five-stage body, seven seats."
     },
-    "petition_id": {
-      "type": "string",
-      "format": "uuid"
-    },
-    "meeting_type": {
-      "type": "string",
-      "enum": ["idea_screen"]
-    },
-    "protocol_version": {
-      "type": "string",
-      "pattern": "^\\d+\\.\\d+\\.\\d+$"
-    },
-    "created_at": {
-      "type": "string",
-      "format": "date-time"
-    },
+    "memo_id": { "type": "string", "format": "uuid" },
+    "petition_id": { "type": "string", "format": "uuid" },
+    "meeting_type": { "type": "string", "enum": ["idea_screen"] },
+    "protocol_version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "created_at": { "type": "string", "format": "date-time" },
     "source": {
       "type": "string",
       "enum": ["board", "baseline"],
-      "description": "Whether this memo came from the synthetic board or a single-LLM baseline. Used by the A/B harness."
+      "description": "Synthetic board vs single-LLM baseline. Used by the A/B harness."
     },
 
-    "verdict": {
-      "type": "string",
-      "enum": ["proceed", "kill", "conditional"]
-    },
+    "verdict": { "type": "string", "enum": ["proceed", "kill", "conditional"] },
     "confidence_weighted": {
       "type": "number",
       "minimum": 0.0,
-      "maximum": 3.0,
-      "description": "Sum of recalibrated confidence across seats voting the winning verdict. Max is roughly n_seats."
+      "maximum": 5.0,
+      "description": "Sum of recalibrated confidence across voting seats backing the winning verdict. Max is roughly n_voting_seats (5 in v2)."
     },
     "confidence_spread": {
       "type": "number",
       "minimum": 0.0,
-      "description": "Difference between winning score and runner-up score. Higher = more decisive."
+      "description": "Winning score minus runner-up score. Higher = more decisive."
     },
 
+    "idea_analysis": {
+      "type": "string",
+      "minLength": 50,
+      "maxLength": 1600,
+      "description": "Neutral framing of what the idea actually is and the core bet. ≤200 words."
+    },
     "verdict_reasoning": {
       "type": "string",
       "minLength": 50,
-      "maxLength": 1500,
-      "description": "The case for the winning verdict as it stands at the end of the meeting. ≤200 words target."
+      "maxLength": 2400,
+      "description": "The case for the winning verdict. ≤300 words."
+    },
+    "vision": {
+      "type": "string",
+      "minLength": 50,
+      "maxLength": 2000,
+      "description": "The upside case / what this becomes if it works. ≤250 words."
     },
     "dissent_summary": {
       "type": "string",
       "minLength": 50,
-      "maxLength": 1200,
-      "description": "The minority's strongest case, charitably stated. ≤150 words target. Never empty."
+      "maxLength": 2000,
+      "description": "The strongest case against the verdict, charitably stated. ≤250 words. Never empty."
+    },
+    "gtm_analysis": {
+      "type": ["string", "null"],
+      "minLength": 50,
+      "maxLength": 1600,
+      "description": "Go-to-market assessment. ≤200 words. A string only when verdict != kill; null/absent when kill."
     },
     "dissent_source": {
       "type": "string",
@@ -91,18 +97,8 @@
         "type": "object",
         "required": ["criterion", "owner_to_monitor"],
         "properties": {
-          "criterion": {
-            "type": "string",
-            "minLength": 20,
-            "maxLength": 300,
-            "description": "A falsifiable, measurable, time-bounded condition that would flip the verdict."
-          },
-          "owner_to_monitor": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 100,
-            "description": "Role or person responsible for tracking this criterion."
-          }
+          "criterion": { "type": "string", "minLength": 20, "maxLength": 300 },
+          "owner_to_monitor": { "type": "string", "minLength": 1, "maxLength": 100 }
         },
         "additionalProperties": false
       }
@@ -112,21 +108,9 @@
       "type": "object",
       "required": ["action", "owner", "deadline"],
       "properties": {
-        "action": {
-          "type": "string",
-          "minLength": 10,
-          "maxLength": 200,
-          "description": "Imperative voice. One step, not a plan."
-        },
-        "owner": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 100
-        },
-        "deadline": {
-          "type": "string",
-          "format": "date"
-        }
+        "action": { "type": "string", "minLength": 10, "maxLength": 200 },
+        "owner": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "deadline": { "type": "string", "format": "date" }
       },
       "additionalProperties": false
     },
@@ -140,16 +124,8 @@
         "properties": {
           "seat_id": { "type": "string" },
           "verdict": { "enum": ["proceed", "kill", "conditional"] },
-          "confidence_raw": {
-            "type": "number",
-            "minimum": 0.0,
-            "maximum": 1.0
-          },
-          "confidence_recalibrated": {
-            "type": "number",
-            "minimum": 0.0,
-            "maximum": 1.5
-          }
+          "confidence_raw": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+          "confidence_recalibrated": { "type": "number", "minimum": 0.0, "maximum": 1.5 }
         },
         "additionalProperties": false
       }
@@ -169,8 +145,7 @@
       "properties": {
         "persona_hashes": {
           "type": "object",
-          "additionalProperties": { "type": "string" },
-          "description": "seat_id -> SHA-256 hash of the persona file. Empty for baseline memos."
+          "additionalProperties": { "type": "string" }
         },
         "model_ids": {
           "type": "object",
@@ -181,29 +156,25 @@
           }
         },
         "seed": { "type": "integer" },
-        "wall_clock_seconds": {
-          "type": "number",
-          "minimum": 0.0
-        },
-        "llm_cost_usd": {
-          "type": "number",
-          "minimum": 0.0
-        },
+        "wall_clock_seconds": { "type": "number", "minimum": 0.0 },
+        "llm_cost_usd": { "type": "number", "minimum": 0.0 },
         "unanimous": { "type": "boolean" },
         "forced_dissent_triggered": { "type": "boolean" },
-        "references_memo_id": {
-          "type": ["string", "null"],
-          "format": "uuid",
-          "description": "If this memo chains to a prior one (e.g., Post-Mortem to Idea Screen). MVP: null."
-        },
-        "reasoning_overlap_score": {
-          "type": ["number", "null"],
-          "minimum": 0.0,
-          "maximum": 1.0,
-          "description": "Jaccard similarity over key terms from each seat's top_three_reasons. >0.6 flags theatrical consensus."
-        }
+        "references_memo_id": { "type": ["string", "null"], "format": "uuid" },
+        "reasoning_overlap_score": { "type": ["number", "null"], "minimum": 0.0, "maximum": 1.0 }
       }
     }
   },
-  "additionalProperties": false
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "description": "gtm_analysis is a non-null string iff the verdict is not kill; null or absent when kill.",
+      "if": { "properties": { "verdict": { "const": "kill" } } },
+      "then": { "properties": { "gtm_analysis": { "type": "null" } } },
+      "else": {
+        "required": ["gtm_analysis"],
+        "properties": { "gtm_analysis": { "type": "string" } }
+      }
+    }
+  ]
 }

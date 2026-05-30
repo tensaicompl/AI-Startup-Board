@@ -1,0 +1,143 @@
+# Idea Screen Protocol Definition — v2
+# Version 2.0.0
+# Read by the chair at CONVENE to configure the meeting.
+# v1 (protocols/idea-screen.yaml) remains runnable; v2 is the default.
+
+protocol_id: idea_screen_v2
+protocol_version: "2.0.0"
+description: >
+  The expanded Idea Screen. Seven seats — five voting, two advisory — deliberate
+  under an eleven-state protocol. The memo body has five stages: idea analysis,
+  verdict reasoning, vision, dissent, and (when the verdict is not kill) a
+  go-to-market analysis.
+
+# Seating
+quorum:
+  required_seats: 7
+  quorum_floor: 3          # if seats abstain, can proceed with this many voting seats
+seats:
+  - operator-ceo
+  - devils-advocate
+  - outsider
+  - visionary
+  - technical
+  - growth-advisor       # advisor (non-voting)
+  - marketing            # gtm-only (non-voting)
+
+# Roles
+voting_seats:
+  - operator-ceo
+  - devils-advocate
+  - outsider
+  - visionary
+  - technical
+advisory_seats:
+  - growth-advisor       # advisor: true  (participates in idea analysis, visionary, gtm)
+  - marketing            # gtm_only: true (participates in gtm stage only)
+devils_advocate_seat: devils-advocate
+visionary_seat: visionary
+gtm_seat: marketing
+
+# State machine config — 11 states
+states:
+  - CONVENE
+  - SEALED_OPENING
+  - ANONYMIZED_REVEAL
+  - IDENTIFIED_REBUTTAL
+  - IDEA_ANALYSIS          # new: all voting + growth-advisor
+  - DEVILS_ADVOCATE
+  - VISIONARY_PASS         # new: visionary + growth-advisor; always runs (even on kill trend)
+  - CONFIDENCE_VOTE
+  - FORCED_DISSENT_CHECK   # conditional; only on unanimity
+  - GTM_STAGE              # new; conditional; only when verdict != kill
+  - MEMO_SYNTHESIS
+
+# Per-state config
+per_state:
+  SEALED_OPENING:
+    parallel: true
+    participants: voting_seats
+    per_seat_timeout_seconds: 60
+    on_malformed: retry_once_then_abstain
+    memory_access: persona_only
+  ANONYMIZED_REVEAL:
+    parallel: true
+    participants: voting_seats
+    per_seat_timeout_seconds: 60
+    memory_access: persona_plus_anonymized_peers
+  IDENTIFIED_REBUTTAL:
+    parallel: true
+    participants: voting_seats
+    per_seat_timeout_seconds: 60
+    memory_access: persona_plus_identified_peers
+    max_rounds: 1
+  IDEA_ANALYSIS:
+    parallel: true
+    participants: voting_plus_growth_advisor
+    per_seat_timeout_seconds: 60
+    memory_access: full_meeting_transcript
+  DEVILS_ADVOCATE:
+    parallel: false
+    participants: [devils-advocate]
+    per_seat_timeout_seconds: 60
+    memory_access: full_meeting_transcript
+  VISIONARY_PASS:
+    parallel: false
+    participants: [visionary, growth-advisor]
+    always_runs: true        # runs even when the trend is kill
+    per_seat_timeout_seconds: 60
+    memory_access: full_meeting_transcript
+  CONFIDENCE_VOTE:
+    parallel: true
+    participants: voting_seats
+    per_seat_timeout_seconds: 30
+    memory_access: full_meeting_transcript
+  FORCED_DISSENT_CHECK:
+    parallel: false
+    trigger: unanimous_vote
+    seat_selector: lowest_confidence_seat   # ties broken alphabetically by seat_id
+    per_seat_timeout_seconds: 60
+  GTM_STAGE:
+    parallel: false
+    participants: [marketing, growth-advisor]
+    trigger: verdict_not_kill              # arithmetic on the tally, not an LLM call
+    per_seat_timeout_seconds: 60
+    memory_access: full_meeting_transcript
+  MEMO_SYNTHESIS:
+    parallel: false
+    synthesis_model: claude-sonnet-4-6
+    max_tokens: 3000
+    enforce_word_limits: true
+
+# Voting
+voting:
+  method: confidence_weighted
+  recalibration: per_persona
+  tie_break: dissent_check
+
+# Memo
+memo:
+  template: idea_screen_v2
+  schema_version: "2.0"
+  body_max_words: 1200
+  body_sections:
+    - idea_analysis        # <= 200 words
+    - verdict_reasoning    # <= 300 words
+    - vision               # <= 250 words
+    - dissent_summary      # <= 250 words
+    - gtm_analysis         # <= 200 words, only if verdict != kill
+  rendering: markdown
+  signatures_required: all_voting_seats
+
+# Diversity requirement
+diversity:
+  min_distinct_axes: 5             # of 7 worldview axes (raised from 4 in v1, 7 seats)
+  refuse_if_below: true
+
+# Cost & latency guardrails (raised for the larger cast)
+cost:
+  soft_cap_usd: 12.0
+  hard_cap_usd: 40.0
+latency:
+  target_seconds: 180
+  hard_cap_seconds: 600

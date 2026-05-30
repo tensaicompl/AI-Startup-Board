@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import date, datetime
 from enum import StrEnum
@@ -229,3 +230,67 @@ class Memo(BaseModel):
     signatures: Annotated[list[Signature], Field(min_length=1)]
 
     metadata: MemoMetadata
+
+
+# --- Memo v2 (five-stage body, seven seats) ---
+
+
+class MemoV2(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal["2.0"] = "2.0"
+
+    memo_id: uuid.UUID
+    petition_id: uuid.UUID
+    meeting_type: MeetingType
+    protocol_version: Annotated[str, Field(pattern=r"^\d+\.\d+\.\d+$")]
+    created_at: datetime
+    source: MemoSource
+
+    verdict: Position
+    # Five voting seats in v2, so the weighted sum can reach ~5 (vs ~3 in v1).
+    confidence_weighted: Annotated[float, Field(ge=0.0, le=5.0)]
+    confidence_spread: Annotated[float, Field(ge=0.0)]
+
+    # Five-stage body. Word budgets are enforced by the synthesizer (Task v2.5);
+    # the character caps here are generous guards sized to the word targets.
+    idea_analysis: Annotated[str, Field(min_length=50, max_length=1600)]      # ≤200 words
+    verdict_reasoning: Annotated[str, Field(min_length=50, max_length=2400)]  # ≤300 words
+    vision: Annotated[str, Field(min_length=50, max_length=2000)]             # ≤250 words
+    dissent_summary: Annotated[str, Field(min_length=50, max_length=2000)]    # ≤250 words
+    # Present only when verdict != kill (enforced below).
+    gtm_analysis: Annotated[str, Field(min_length=50, max_length=1600)] | None = None  # ≤200 words
+
+    dissent_source: str
+    kill_criteria: Annotated[list[KillCriterion], Field(min_length=1, max_length=5)]
+    next_action: NextAction
+    signatures: Annotated[list[Signature], Field(min_length=1)]
+    metadata: MemoMetadata
+
+    def model_post_init(self, __context: object) -> None:
+        # gtm_analysis is present iff the verdict is not kill.
+        if self.verdict == Position.KILL and self.gtm_analysis is not None:
+            raise ValueError("gtm_analysis must be omitted when verdict is kill")
+        if self.verdict != Position.KILL and self.gtm_analysis is None:
+            raise ValueError("gtm_analysis is required when verdict is not kill")
+
+
+# Version-discriminated memo. Manual dispatch (not a pydantic discriminated union)
+# because persisted v1 memos predate the schema_version field. See Decision 009.
+AnyMemo = Memo | MemoV2
+
+
+def parse_memo(data: dict[str, object]) -> AnyMemo:
+    """Route raw memo data to the right model by version.
+
+    v2 is tagged by `schema_version == "2.0"` (or the presence of the v2-only
+    `idea_analysis` body field); anything else is v1.
+    """
+    if data.get("schema_version") == "2.0" or "idea_analysis" in data:
+        return MemoV2.model_validate(data)
+    return Memo.model_validate(data)
+
+
+def parse_memo_json(raw: str) -> AnyMemo:
+    """Parse a memo JSON string to whichever schema version it encodes."""
+    return parse_memo(json.loads(raw))
