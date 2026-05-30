@@ -23,7 +23,7 @@ from pathlib import Path
 
 from sboard.baseline import DEFAULT_BASELINE_PROMPT_PATH, run_baseline
 from sboard.chair.meeting_state import MeetingState, ProtocolState
-from sboard.chair.state_machine import run_meeting
+from sboard.chair.state_machine import run_meeting, run_meeting_v2
 from sboard.db.store import (
     get_petition,
     init_db,
@@ -31,14 +31,19 @@ from sboard.db.store import (
     insert_petition,
     insert_transcript,
 )
-from sboard.schemas import Memo, Petition
+from sboard.protocol import (
+    DEFAULT_PROTOCOL_ID,
+    DEFAULT_PROTOCOLS_DIR,
+    ProtocolConfig,
+    load_protocol,
+)
+from sboard.schemas import Memo, MemoV2, Petition
 from sboard.seats.llm_client import AnthropicClient, MockClient
 from sboard.seats.persona_loader import load_all_personas
 from sboard.service import (
     DEFAULT_DB_PATH,
     DEFAULT_PERSONAS_DIR,
     DEFAULT_SEED,
-    V1_SEATS,
     load_petition,
 )
 
@@ -59,12 +64,12 @@ class ABResult:
     run_dir: Path
     master_path: Path
     rating_csv_path: Path
-    board_memo: Memo
+    board_memo: Memo | MemoV2
     baseline_memo: Memo
     label_to_pipeline: dict[str, str]  # {"A": "board"|"baseline", "B": ...}
 
 
-def render_anonymized_memo(memo: Memo) -> str:
+def render_anonymized_memo(memo: Memo | MemoV2) -> str:
     """Render only the pipeline-neutral decision surface.
 
     Deliberately omits source, signatures, confidence internals, and all
@@ -166,7 +171,7 @@ def _build_master(
     seed: int,
     ab_seed: int,
     label_to_pipeline: dict[str, str],
-    board_memo: Memo,
+    board_memo: Memo | MemoV2,
     baseline_memo: Memo,
 ) -> dict[str, object]:
     pipeline_to_label = {v: k for k, v in label_to_pipeline.items()}
@@ -188,7 +193,7 @@ def _persist_ab(
     db_path: Path,
     petition: Petition,
     board_state: MeetingState,
-    board_memo: Memo,
+    board_memo: Memo | MemoV2,
     baseline_memo: Memo,
 ) -> None:
     db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -205,19 +210,30 @@ def _persist_ab(
 
 
 def _run_board(
-    petition: Petition, personas_dir: Path, seed: int, client: AnthropicClient
+    petition: Petition,
+    personas_dir: Path,
+    seed: int,
+    client: AnthropicClient,
+    config: ProtocolConfig,
 ) -> MeetingState:
     all_personas = load_all_personas(personas_dir)
     if not all_personas:
         raise ABError(f"No persona files found in {personas_dir}")
-    if any(s not in all_personas for s in V1_SEATS):
-        raise ABError(f"Missing required v1 seats in {personas_dir}")
-    # TRANSITIONAL (remove at v2.4): seat only the v1 trio. v2.4 makes seating
-    # protocol-driven (the --protocol idea_screen_v2 path seats all 7).
-    personas = {sid: p for sid, p in all_personas.items() if sid in V1_SEATS}
-    state = MeetingState(petition=petition, personas=personas, seed=seed)
+    missing = [s for s in config.seats if s not in all_personas]
+    if missing:
+        raise ABError(
+            f"Protocol {config.protocol_id} requires seats {missing} "
+            f"not found in {personas_dir}"
+        )
+    personas = {sid: p for sid, p in all_personas.items() if sid in config.seats}
+    state = MeetingState(
+        petition=petition,
+        personas=personas,
+        seed=seed,
+        protocol_version=config.protocol_version,
+    )
     try:
-        final = run_meeting(state, client)
+        final = run_meeting_v2(state, client) if config.is_v2 else run_meeting(state, client)
     except ABError:
         raise
     except Exception as exc:
@@ -233,7 +249,9 @@ def _run_board(
 def run_ab(
     petition_path: Path,
     *,
+    protocol_id: str = DEFAULT_PROTOCOL_ID,
     personas_dir: Path = DEFAULT_PERSONAS_DIR,
+    protocols_dir: Path = DEFAULT_PROTOCOLS_DIR,
     runs_dir: Path = DEFAULT_RUNS_DIR,
     master_dir: Path = DEFAULT_MASTER_DIR,
     db_path: Path = DEFAULT_DB_PATH,
@@ -243,14 +261,19 @@ def run_ab(
     client: AnthropicClient | None = None,
     persist_db: bool = True,
 ) -> ABResult:
-    """Run board + baseline on one petition and write the blind rating bundle."""
+    """Run board + baseline on one petition and write the blind rating bundle.
+
+    The board runs the protocol's graph (v1 or v2); the baseline is unchanged so
+    v2-vs-baseline stays comparable to v1-vs-baseline.
+    """
     client = client or MockClient()
+    config = load_protocol(protocol_id, protocols_dir)
     petition = load_petition(petition_path)
     pid = str(petition.petition_id)
 
     # Both pipelines are independent; run them concurrently.
     with ThreadPoolExecutor(max_workers=2) as pool:
-        board_future = pool.submit(_run_board, petition, personas_dir, seed, client)
+        board_future = pool.submit(_run_board, petition, personas_dir, seed, client, config)
         baseline_future = pool.submit(
             run_baseline, petition, client, seed=seed, prompt_path=baseline_prompt_path
         )

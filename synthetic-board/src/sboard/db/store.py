@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from sboard.chair.meeting_state import TranscriptEntry
-from sboard.schemas import Memo, Petition
+from sboard.schemas import Memo, MemoV2, Petition, parse_memo_json
 
 MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 
@@ -64,7 +64,7 @@ def insert_transcript(
     return cursor.lastrowid or 0
 
 
-def insert_memo(conn: sqlite3.Connection, memo: Memo) -> None:
+def insert_memo(conn: sqlite3.Connection, memo: Memo | MemoV2) -> None:
     conn.execute(
         "INSERT INTO memos (memo_id, petition_id, source, data) VALUES (?, ?, ?, ?)",
         (
@@ -99,16 +99,18 @@ def get_transcript(
     return json.loads(row[0])  # type: ignore[no-any-return]
 
 
-def get_memo(conn: sqlite3.Connection, memo_id: str) -> Memo | None:
+def get_memo(conn: sqlite3.Connection, memo_id: str) -> Memo | MemoV2 | None:
     row = conn.execute(
         "SELECT data FROM memos WHERE memo_id = ?", (memo_id,)
     ).fetchone()
     if row is None:
         return None
-    return Memo.model_validate_json(row[0])
+    return parse_memo_json(row[0])
 
 
-def get_memo_by_petition(conn: sqlite3.Connection, petition_id: str) -> Memo | None:
+def get_memo_by_petition(
+    conn: sqlite3.Connection, petition_id: str
+) -> Memo | MemoV2 | None:
     row = conn.execute(
         "SELECT data FROM memos WHERE petition_id = ? "
         "ORDER BY inserted_at DESC LIMIT 1",
@@ -116,9 +118,9 @@ def get_memo_by_petition(conn: sqlite3.Connection, petition_id: str) -> Memo | N
     ).fetchone()
     if row is None:
         return None
-    return Memo.model_validate_json(row[0])
+    return parse_memo_json(row[0])
 
 
-def list_memos(conn: sqlite3.Connection) -> list[Memo]:
+def list_memos(conn: sqlite3.Connection) -> list[Memo | MemoV2]:
     rows = conn.execute("SELECT data FROM memos ORDER BY inserted_at").fetchall()
-    return [Memo.model_validate_json(r[0]) for r in rows]
+    return [parse_memo_json(r[0]) for r in rows]

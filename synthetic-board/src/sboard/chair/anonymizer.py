@@ -9,7 +9,10 @@ from typing import Any
 from sboard.schemas import SealedOpening
 from sboard.seats.persona_loader import Persona
 
-LABELS = ["Seat A", "Seat B", "Seat C"]
+# A..G (7 seats). Kept in the "Seat X" form required by ReviewItem.target_label
+# (^Seat [A-Z]$). The per-meeting map is built from the meeting seed and recorded
+# in chair state (MeetingState.anonymization_map) — it is not a global constant.
+LABELS = ["Seat A", "Seat B", "Seat C", "Seat D", "Seat E", "Seat F", "Seat G"]
 
 
 def build_anonymization_map(

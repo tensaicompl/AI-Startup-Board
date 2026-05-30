@@ -20,6 +20,9 @@ from sboard.ab import (
     run_ab,
 )
 from sboard.baseline import BaselineError
+from sboard.protocol import DEFAULT_PROTOCOL_ID, ProtocolError
+
+_PROTOCOL_HELP = "Protocol id: idea_screen_v2 (default, 7 seats) or idea_screen_v1 (3 seats)."
 
 app = typer.Typer(
     name="sboard",
@@ -55,10 +58,16 @@ def convene(
         envvar="SBOARD_PERSONAS",
         help="Directory of persona .md files for the board seats.",
     ),
+    protocol: str = typer.Option(DEFAULT_PROTOCOL_ID, "--protocol", help=_PROTOCOL_HELP),
     seed: int = typer.Option(
         service.DEFAULT_SEED,
         "--seed",
         help="Deterministic seed for anonymization shuffling.",
+    ),
+    live: bool = typer.Option(
+        False,
+        "--live/--mock",
+        help="Use the real Anthropic API (needs ANTHROPIC_API_KEY) instead of mocks.",
     ),
     show_memo: bool = typer.Option(
         True,
@@ -68,13 +77,24 @@ def convene(
 ) -> None:
     """Run a board meeting on a petition and produce a memo."""
     try:
+        client = service.make_client(live=live)
+    except RuntimeError as exc:
+        typer.secho(str(exc), fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=2) from exc
+
+    try:
         result = service.convene(
             petition,
+            protocol_id=protocol,
             personas_dir=personas,
             db_path=db,
             out_dir=out,
             seed=seed,
+            client=client,
         )
+    except ProtocolError as exc:
+        typer.secho(f"Protocol error: {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=2) from exc
     except service.ConveneError as exc:
         typer.secho(f"Meeting aborted: {exc}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1) from exc
@@ -150,6 +170,7 @@ def ab(
         envvar="SBOARD_PERSONAS",
         help="Directory of persona .md files for the board seats.",
     ),
+    protocol: str = typer.Option(DEFAULT_PROTOCOL_ID, "--protocol", help=_PROTOCOL_HELP),
     seed: int = typer.Option(service.DEFAULT_SEED, "--seed", help="Board protocol seed."),
     ab_seed: int = typer.Option(
         DEFAULT_AB_SEED, "--ab-seed", help="Seed for blind A/B label assignment."
@@ -170,6 +191,7 @@ def ab(
     try:
         result = run_ab(
             petition,
+            protocol_id=protocol,
             personas_dir=personas,
             runs_dir=runs_dir,
             master_dir=master_dir,
@@ -178,6 +200,9 @@ def ab(
             ab_seed=ab_seed,
             client=client,
         )
+    except ProtocolError as exc:
+        typer.secho(f"Protocol error: {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=2) from exc
     except (ABError, BaselineError, FileNotFoundError) as exc:
         typer.secho(f"A/B run failed: {exc}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1) from exc

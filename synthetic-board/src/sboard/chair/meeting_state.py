@@ -14,6 +14,7 @@ from sboard.schemas import (
     GtmOutput,
     IdeaAnalysisOutput,
     Memo,
+    MemoV2,
     Petition,
     Position,
     Rebuttal,
@@ -90,7 +91,7 @@ class MeetingState:
     forced_dissent_triggered: bool = False
     forced_dissent_output: ForcedDissent | None = None
 
-    memo: Memo | None = None
+    memo: Memo | MemoV2 | None = None
 
     total_llm_cost_usd: float = 0.0
     wall_clock_start: float = field(default_factory=time.monotonic)

@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from sboard.chair.meeting_state import MeetingState, ProtocolState
-from sboard.chair.state_machine import run_meeting
+from sboard.chair.state_machine import run_meeting, run_meeting_v2
 from sboard.db.store import (
     get_memo,
     get_petition,
@@ -30,7 +30,8 @@ from sboard.db.store import (
     insert_transcript,
 )
 from sboard.memo.formatter import format_memo_markdown
-from sboard.schemas import Memo, Petition
+from sboard.protocol import DEFAULT_PROTOCOL_ID, DEFAULT_PROTOCOLS_DIR, load_protocol
+from sboard.schemas import Memo, MemoV2, Petition
 from sboard.seats.llm_client import AnthropicClient, LiveAnthropicClient, MockClient
 from sboard.seats.persona_loader import load_all_personas
 
@@ -42,14 +43,10 @@ DEFAULT_OUT_DIR = Path("out")
 DEFAULT_PERSONAS_DIR = Path("personas")
 DEFAULT_SEED = 42
 
-# TRANSITIONAL — REMOVE AT TASK v2.4.
-# This hard-coded trio is NOT a design choice; it is a temporary pin. The
-# personas/ directory now holds all 7 seats, but the only wired flow is still the
-# 3-seat v1 graph, which cannot seat 7 (anonymizer labels, the v1 memo's 3.0
-# confidence cap). v2.4 makes seating protocol-driven (the v2 default seats all 7
-# from idea-screen-v2.yaml); when it lands, delete V1_SEATS and the filters in
-# convene()/ab._run_board() that reference it, and seat from the protocol roster.
-V1_SEATS = ("operator-ceo", "devils-advocate", "outsider")
+# Seating is now protocol-driven (Task v2.4): the roster comes from the protocol
+# YAML (idea-screen.yaml = 3 seats, idea-screen-v2.yaml = 7), and the protocol
+# selects the v1 (8-state) or v2 (11-state) graph. The transitional V1_SEATS pin
+# is gone.
 
 
 class ConveneError(Exception):
@@ -58,7 +55,7 @@ class ConveneError(Exception):
 
 @dataclass(frozen=True)
 class ConveneResult:
-    memo: Memo
+    memo: Memo | MemoV2
     memo_markdown: str
     memo_md_path: Path
     memo_json_path: Path
@@ -68,7 +65,7 @@ class ConveneResult:
 
 @dataclass(frozen=True)
 class Inspection:
-    memo: Memo
+    memo: Memo | MemoV2
     petition: Petition | None
     transcript: list[dict[str, Any]]
 
@@ -92,7 +89,7 @@ def _persist_audit_trail(
     db_path: Path,
     petition: Petition,
     state: MeetingState,
-    memo: Memo | None,
+    memo: Memo | MemoV2 | None,
 ) -> None:
     """Append the meeting's records to the audit DB.
 
@@ -116,7 +113,9 @@ def _persist_audit_trail(
 def convene(
     petition_path: Path,
     *,
+    protocol_id: str = DEFAULT_PROTOCOL_ID,
     personas_dir: Path = DEFAULT_PERSONAS_DIR,
+    protocols_dir: Path = DEFAULT_PROTOCOLS_DIR,
     db_path: Path = DEFAULT_DB_PATH,
     out_dir: Path = DEFAULT_OUT_DIR,
     seed: int = DEFAULT_SEED,
@@ -124,24 +123,32 @@ def convene(
 ) -> ConveneResult:
     """Run the protocol end-to-end, persist the audit trail, write the memo.
 
-    Defaults to the deterministic `MockClient`; tasks 1-9 run against mocks and
-    need no API key. The real Anthropic client is injected at Task 10.
+    Seating and graph come from the protocol (default v2). Defaults to the
+    deterministic `MockClient`; `--live` injects the real client.
     """
     client = client or MockClient()
 
+    config = load_protocol(protocol_id, protocols_dir)
     petition = load_petition(petition_path)
     all_personas = load_all_personas(personas_dir)
     if not all_personas:
         raise ConveneError(f"No persona files found in {personas_dir}")
-    missing = [s for s in V1_SEATS if s not in all_personas]
+    missing = [s for s in config.seats if s not in all_personas]
     if missing:
-        raise ConveneError(f"Missing required v1 seats {missing} in {personas_dir}")
-    # TRANSITIONAL (remove at v2.4): seat only the v1 trio; v2.4 seats from the
-    # protocol roster. Filter preserves directory order (keeps the seed stable).
-    personas = {sid: p for sid, p in all_personas.items() if sid in V1_SEATS}
+        raise ConveneError(
+            f"Protocol {config.protocol_id} requires seats {missing} "
+            f"not found in {personas_dir}"
+        )
+    # Seat the protocol roster, preserving directory order (keeps the seed stable).
+    personas = {sid: p for sid, p in all_personas.items() if sid in config.seats}
 
-    state = MeetingState(petition=petition, personas=personas, seed=seed)
-    final = run_meeting(state, client)
+    state = MeetingState(
+        petition=petition,
+        personas=personas,
+        seed=seed,
+        protocol_version=config.protocol_version,
+    )
+    final = run_meeting_v2(state, client) if config.is_v2 else run_meeting(state, client)
 
     if final.current_state == ProtocolState.ABORTED or final.memo is None:
         # Still persist petition + transcript: an aborted meeting is part of the
@@ -206,7 +213,7 @@ def render_transcript(transcript: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-def render_memo(memo: Memo) -> str:
+def render_memo(memo: Memo | MemoV2) -> str:
     """Render a memo to Markdown (role names only, never source-figure names)."""
     return format_memo_markdown(memo)
 

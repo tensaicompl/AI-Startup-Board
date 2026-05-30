@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import time
 import uuid
 from datetime import UTC, date, datetime
@@ -18,6 +19,7 @@ from sboard.schemas import (
     MemoMetadata,
     MemoModelIds,
     MemoSource,
+    MemoV2,
     NextAction,
     Position,
     Signature,
@@ -263,6 +265,142 @@ def synthesize_memo(
         dissent_summary=synthesis_output.dissent_summary,
         dissent_source=_determine_dissent_source(state),
         kill_criteria=kill_criteria,
+        next_action=_build_next_action(state),
+        signatures=_build_signatures(state),
+        metadata=MemoMetadata(
+            persona_hashes={sid: p.file_hash for sid, p in state.personas.items()},
+            model_ids=MemoModelIds(
+                seats=client.get_default_seat_model(),
+                synthesis=synthesis_model,
+            ),
+            seed=state.seed,
+            wall_clock_seconds=round(wall_clock, 2),
+            llm_cost_usd=round(state.total_llm_cost_usd, 4),
+            unanimous=state.unanimous,
+            forced_dissent_triggered=state.forced_dissent_triggered,
+            reasoning_overlap_score=_compute_reasoning_overlap(state),
+        ),
+    )
+
+
+# --- v2 synthesis (Task v2.4; word-budget + forbidden-token enforcement is v2.5) ---
+
+
+class SynthesisV2Output(BaseModel):
+    """The five prose body sections the v2 synthesis LLM writes in one call.
+    gtm_analysis is optional: the synthesizer drops it on a kill verdict."""
+
+    idea_analysis: Annotated[str, Field(min_length=50, max_length=1600)]
+    verdict_reasoning: Annotated[str, Field(min_length=50, max_length=2400)]
+    vision: Annotated[str, Field(min_length=50, max_length=2000)]
+    dissent_summary: Annotated[str, Field(min_length=50, max_length=2000)]
+    gtm_analysis: Annotated[str, Field(min_length=50, max_length=1600)] | None = None
+
+
+def _build_synthesis_prompt_v2(state: MeetingState) -> str:
+    """Assemble the v2 synthesis prompt from the stage outputs. Output prose must
+    be pipeline-neutral (no board/seats/figures) — see Decision 007."""
+    parts: list[str] = [
+        f"Provisional verdict: {state.final_verdict.value if state.final_verdict else 'unknown'}.",
+        "",
+        "Source material (internal — never quote it or describe its structure):",
+        "",
+        "What the business actually is:",
+    ]
+    for ia in state.idea_analysis_outputs.values():
+        parts.append(f"  - {ia.plain_description} (core bet: {ia.core_bet})")
+    parts.append("\nPositions:")
+    for sid in state.responding_seat_ids:
+        ss = state.seat_states[sid]
+        if ss.rebuttal:
+            parts.append(f"  - {ss.rebuttal.position.value}: {ss.rebuttal.rebuttal_text}")
+    if state.devils_advocate_output:
+        parts.append("\nStrongest counter-case to the majority:")
+        parts.append(f"  {state.devils_advocate_output.steelman_against_majority}")
+    if state.visionary_outputs:
+        parts.append("\nThe upside case:")
+        for vo in state.visionary_outputs.values():
+            parts.append(f"  - {vo.upside_if_it_works}")
+    if state.gtm_outputs:
+        parts.append("\nGo-to-market notes:")
+        for go in state.gtm_outputs.values():
+            parts.append(f"  - promise: {go.one_promise}; channel: {go.primary_channel}")
+
+    parts.extend([
+        "",
+        "Write a standalone advisory memo as a single, decisive advisor voice.",
+        "Output exactly these JSON fields:",
+        '  "idea_analysis": what the business actually is and its core bet (≤200 words).',
+        '  "verdict_reasoning": the case for the verdict (≤300 words).',
+        '  "vision": the upside if it works (≤250 words).',
+        '  "dissent_summary": the strongest case against the verdict (≤250 words).',
+        '  "gtm_analysis": the go-to-market assessment (≤200 words) — OMIT if the '
+        "verdict is kill.",
+        "",
+        "Hard constraints: do NOT mention a board, panel, seats, voting, a tally, a "
+        "devil's advocate, or any internal process or scores. Write as one advisor "
+        "to the founder.",
+    ])
+    return "\n".join(parts)
+
+
+def _assemble_gtm(state: MeetingState) -> str | None:
+    """Fallback GTM prose assembled from the GTM stage outputs (if the LLM omitted it)."""
+    if not state.gtm_outputs:
+        return None
+    parts = [
+        f"Promise: {g.one_promise} Channel: {g.primary_channel} First move: {g.first_motion}"
+        for g in state.gtm_outputs.values()
+    ]
+    return " ".join(parts)[:1600]
+
+
+def synthesize_memo_v2(state: MeetingState, client: AnthropicClient) -> MemoV2:
+    """Build a v2 memo: five body sections from one LLM call, structural fields by
+    code. gtm_analysis is present iff the verdict is not kill."""
+    synthesis_model = client.get_default_synthesis_model()
+    prompt = _build_synthesis_prompt_v2(state)
+
+    response = client.call(
+        system_prompt=(
+            "You are an advisory memo writer. Output valid JSON with the five body "
+            "fields. Write in a neutral, standalone advisor voice that never "
+            "references any board, panel, seats, voting, or internal process."
+        ),
+        user_message=prompt,
+        output_schema=SynthesisV2Output,
+        seat_id="synthesis",
+        stage="memo_synthesis_v2",
+        model=synthesis_model,
+        max_tokens=3000,
+    )
+    state.total_llm_cost_usd += response.cost_usd
+    out = SynthesisV2Output.model_validate(json.loads(response.content))
+
+    verdict = state.final_verdict or Position.CONDITIONAL
+    # Conditional routing already gated GTM on verdict != kill; enforce the memo
+    # invariant here too: gtm present iff not kill.
+    gtm = None if verdict == Position.KILL else (out.gtm_analysis or _assemble_gtm(state))
+
+    wall_clock = time.monotonic() - state.wall_clock_start
+
+    return MemoV2(
+        memo_id=uuid.uuid4(),
+        petition_id=state.petition.petition_id,
+        meeting_type=MeetingType.IDEA_SCREEN,
+        protocol_version=state.protocol_version,
+        created_at=datetime.now(UTC),
+        source=MemoSource.BOARD,
+        verdict=verdict,
+        confidence_weighted=round(state.confidence_weighted, 4),
+        confidence_spread=round(state.confidence_spread, 4),
+        idea_analysis=out.idea_analysis,
+        verdict_reasoning=out.verdict_reasoning,
+        vision=out.vision,
+        dissent_summary=out.dissent_summary,
+        gtm_analysis=gtm,
+        dissent_source=_determine_dissent_source(state),
+        kill_criteria=_deduplicate_kill_criteria(state),
         next_action=_build_next_action(state),
         signatures=_build_signatures(state),
         metadata=MemoMetadata(

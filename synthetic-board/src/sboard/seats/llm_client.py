@@ -374,7 +374,47 @@ class MockClient(AnthropicClient):
                 ),
             }
 
+        if stage == "memo_synthesis_v2":
+            return self._generate_mock_memo_v2()
+
         raise ValueError(f"Unknown stage: {stage}")
+
+    def _generate_mock_memo_v2(self) -> dict[str, Any]:
+        """Five-section v2 body. Neutral prose (no board/seats/figure references)."""
+        return {
+            "idea_analysis": (
+                "Underneath the pitch, this is a vertical compliance tool: it pulls audit "
+                "evidence from systems a mid-market company already runs and hands an "
+                "auditor a finished package. The core bet is that a hard regulatory "
+                "deadline turns a deferred chore into a budgeted purchase."
+            ),
+            "verdict_reasoning": (
+                "The regulatory deadline is a real forcing function and the founding pair "
+                "is well matched to the problem. But there is no paid customer yet, the "
+                "moat is a timing advantage rather than a structural one, and the runway "
+                "is tight against the enterprise sales cycle. On balance this is worth "
+                "continuing only against concrete proof of commercial traction, so the "
+                "verdict is conditional rather than a clean go."
+            ),
+            "vision": (
+                "At its best this becomes the system of record for compliance evidence in "
+                "its region: the place every audit artifact is born, so leaving means "
+                "re-papering years of history. That is a durable, expensive-to-leave "
+                "position rather than a feature a larger vendor can bolt on in a sprint."
+            ),
+            "dissent_summary": (
+                "The strongest case against is that compliance automation is a feature, "
+                "not a company, and that a larger competitor can localize faster than a "
+                "regional entrant can scale. The timing advantage helps everyone, and a "
+                "well-resourced incumbent could close the same accounts within a year."
+            ),
+            "gtm_analysis": (
+                "Reach the buyer through the managed-security providers who already hold "
+                "the relationship; lead with a single promise — pass your audit with a "
+                "fraction of the effort, on evidence an examiner already trusts — and "
+                "prove it with one public reference customer in the region."
+            ),
+        }
 
     def _generate_mock_memo(self) -> dict[str, Any]:
         return {

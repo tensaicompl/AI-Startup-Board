@@ -226,6 +226,7 @@ def _determine_majority_trend(state: MeetingState) -> Position:
 def do_devils_advocate(state: MeetingState, client: AnthropicClient) -> None:
     """S5: DA produces steelman against majority."""
     start = time.monotonic()
+    state.current_state = ProtocolState.DEVILS_ADVOCATE  # label own state (v2-safe)
 
     da_sid: str | None = None
     for sid, persona in state.personas.items():
@@ -270,6 +271,7 @@ def do_devils_advocate(state: MeetingState, client: AnthropicClient) -> None:
 def do_confidence_vote(state: MeetingState, client: AnthropicClient) -> None:
     """S6: Each voting seat casts verdict + confidence."""
     start = time.monotonic()
+    state.current_state = ProtocolState.CONFIDENCE_VOTE  # label own state (v2-safe)
 
     rebuttals_text: list[str] = []
     for sid in state.responding_seat_ids:
@@ -343,6 +345,7 @@ def do_confidence_vote(state: MeetingState, client: AnthropicClient) -> None:
 def do_forced_dissent_check(state: MeetingState, client: AnthropicClient) -> None:
     """S7: On unanimity, lowest-confidence seat produces counter-case."""
     start = time.monotonic()
+    state.current_state = ProtocolState.FORCED_DISSENT_CHECK  # label own state (v2-safe)
 
     recal_factors = {sid: p.protocol.recalibration_factor for sid, p in state.personas.items()}
     dissent_seat = select_forced_dissent_seat(state.votes, recal_factors)

@@ -291,8 +291,11 @@ class MemoV2(BaseModel):
     source: MemoSource
 
     verdict: Position
-    # Five voting seats in v2, so the weighted sum can reach ~5 (vs ~3 in v1).
-    confidence_weighted: Annotated[float, Field(ge=0.0, le=5.0)]
+    # Architectural ceiling = n_voting (5) x max recal (1.0) x max voting_weight (1.5)
+    # = 7.5. (recal = confidence_raw[<=1] x recalibration_factor[<=1]; weight in
+    # [0.5, 1.5] per the persona schema.) With the current personas all at weight
+    # 1.0 the practical max is 5.0, but the schema permits 1.5 — see Decision 011.
+    confidence_weighted: Annotated[float, Field(ge=0.0, le=7.5)]
     confidence_spread: Annotated[float, Field(ge=0.0)]
 
     # Five-stage body. Word budgets are enforced by the synthesizer (Task v2.5);

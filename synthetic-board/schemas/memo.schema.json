@@ -45,8 +45,8 @@
     "confidence_weighted": {
       "type": "number",
       "minimum": 0.0,
-      "maximum": 5.0,
-      "description": "Sum of recalibrated confidence across voting seats backing the winning verdict. Max is roughly n_voting_seats (5 in v2)."
+      "maximum": 7.5,
+      "description": "Sum of (recalibrated confidence x voting_weight) across voting seats backing the winning verdict. Architectural ceiling = 5 seats x recal<=1.0 x weight<=1.5 = 7.5 (Decision 011)."
     },
     "confidence_spread": {
       "type": "number",

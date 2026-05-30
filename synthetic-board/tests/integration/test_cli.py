@@ -8,6 +8,7 @@ persisted, inspect round-trips by memo_id, and source-figure names never surface
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from pathlib import Path
 
@@ -181,13 +182,17 @@ def test_no_source_figure_names_in_user_output(tmp_path: Path) -> None:
     insp = runner.invoke(app, ["inspect", memo_id, "--db", str(db)])
     assert insp.exit_code == 0, insp.output
 
+    # Word-boundary match: a token leaks only as a whole word, so "GE" (General
+    # Electric) does not false-positive on a protocol state like "GTM_STAGE".
     combined = conv.stdout + conv.stderr + insp.stdout + insp.stderr
     for name in FORBIDDEN_NAMES:
-        assert name not in combined, f"source-figure token leaked into output: {name!r}"
+        assert not re.search(rf"\b{re.escape(name)}\b", combined), (
+            f"source-figure token leaked into output: {name!r}"
+        )
 
     # The on-disk memo artifact is clean too.
     md_text = (out / f"{memo_id}.md").read_text()
-    assert not any(name in md_text for name in FORBIDDEN_NAMES)
+    assert not any(re.search(rf"\b{re.escape(name)}\b", md_text) for name in FORBIDDEN_NAMES)
 
 
 def test_convene_seed_is_deterministic(tmp_path: Path) -> None:
