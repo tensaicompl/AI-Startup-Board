@@ -11,11 +11,14 @@ from sboard.schemas import (
     AnonymizedReview,
     DevilsAdvocateOutput,
     ForcedDissent,
+    GtmOutput,
+    IdeaAnalysisOutput,
     Memo,
     Petition,
     Position,
     Rebuttal,
     SealedOpening,
+    VisionaryOutput,
     Vote,
 )
 from sboard.seats.persona_loader import Persona
@@ -26,9 +29,12 @@ class ProtocolState(StrEnum):
     SEALED_OPENING = "SEALED_OPENING"
     ANONYMIZED_REVEAL = "ANONYMIZED_REVEAL"
     IDENTIFIED_REBUTTAL = "IDENTIFIED_REBUTTAL"
+    IDEA_ANALYSIS = "IDEA_ANALYSIS"        # v2
     DEVILS_ADVOCATE = "DEVILS_ADVOCATE"
+    VISIONARY_PASS = "VISIONARY_PASS"      # v2
     CONFIDENCE_VOTE = "CONFIDENCE_VOTE"
     FORCED_DISSENT_CHECK = "FORCED_DISSENT_CHECK"
+    GTM_STAGE = "GTM_STAGE"                # v2; conditional on verdict != kill
     MEMO_SYNTHESIS = "MEMO_SYNTHESIS"
     COMPLETE = "COMPLETE"
     ABORTED = "ABORTED"
@@ -67,6 +73,11 @@ class MeetingState:
 
     anonymization_map: dict[str, str] = field(default_factory=dict)
     anonymized_openings: list[dict[str, Any]] = field(default_factory=list)
+
+    # v2 stage outputs (keyed by seat_id)
+    idea_analysis_outputs: dict[str, IdeaAnalysisOutput] = field(default_factory=dict)
+    visionary_outputs: dict[str, VisionaryOutput] = field(default_factory=dict)
+    gtm_outputs: dict[str, GtmOutput] = field(default_factory=dict)
 
     devils_advocate_output: DevilsAdvocateOutput | None = None
     majority_trend: Position | None = None

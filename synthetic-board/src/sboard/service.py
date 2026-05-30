@@ -42,9 +42,13 @@ DEFAULT_OUT_DIR = Path("out")
 DEFAULT_PERSONAS_DIR = Path("personas")
 DEFAULT_SEED = 42
 
-# The v1 Idea Screen cast. The personas/ directory now also holds the v2 seats;
-# until the protocol-driven seating lands (Task v2.4), the v1 entry points seat
-# exactly this trio rather than whatever files are present.
+# TRANSITIONAL — REMOVE AT TASK v2.4.
+# This hard-coded trio is NOT a design choice; it is a temporary pin. The
+# personas/ directory now holds all 7 seats, but the only wired flow is still the
+# 3-seat v1 graph, which cannot seat 7 (anonymizer labels, the v1 memo's 3.0
+# confidence cap). v2.4 makes seating protocol-driven (the v2 default seats all 7
+# from idea-screen-v2.yaml); when it lands, delete V1_SEATS and the filters in
+# convene()/ab._run_board() that reference it, and seat from the protocol roster.
 V1_SEATS = ("operator-ceo", "devils-advocate", "outsider")
 
 
@@ -132,7 +136,8 @@ def convene(
     missing = [s for s in V1_SEATS if s not in all_personas]
     if missing:
         raise ConveneError(f"Missing required v1 seats {missing} in {personas_dir}")
-    # Preserve the directory's natural order (keeps the seeded anonymization stable).
+    # TRANSITIONAL (remove at v2.4): seat only the v1 trio; v2.4 seats from the
+    # protocol roster. Filter preserves directory order (keeps the seed stable).
     personas = {sid: p for sid, p in all_personas.items() if sid in V1_SEATS}
 
     state = MeetingState(petition=petition, personas=personas, seed=seed)

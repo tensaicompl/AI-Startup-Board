@@ -93,6 +93,15 @@ def test_must_produce_loaded() -> None:
     assert "kill_criteria" in p.must_produce
 
 
+def test_v1_personas_default_advisor_gtm_only_false() -> None:
+    """v1 files omit advisor/gtm_only and must still load, defaulting to False
+    (Decision 010)."""
+    for name in ("operator-ceo", "devils-advocate", "outsider"):
+        p = load_persona(PERSONAS_DIR / f"{name}.md")
+        assert p.advisor is False
+        assert p.gtm_only is False
+
+
 def test_rejects_invalid_frontmatter(tmp_path: Path) -> None:
     bad_file = tmp_path / "bad.md"
     bad_file.write_text("---\nseat_id: x\n---\nBody here.")

@@ -216,7 +216,9 @@ class MockClient(AnthropicClient):
     def get_default_synthesis_model(self) -> str:
         return os.environ.get("SBOARD_SYNTHESIS_MODEL", "claude-sonnet-4-6")
 
-    def _generate_mock_output(
+    # Flat per-stage dispatcher for canned mock outputs; the branch count is
+    # inherent to the number of protocol stages, so the complexity is expected.
+    def _generate_mock_output(  # noqa: C901
         self, stage: str, seat_id: str
     ) -> dict[str, Any]:
         if stage == "sealed_opening":
@@ -317,6 +319,60 @@ class MockClient(AnthropicClient):
 
         if stage == "baseline":
             return self._generate_mock_baseline()
+
+        if stage == "idea_analysis":
+            return {
+                "seat_id": seat_id,
+                "stage": "idea_analysis",
+                "plain_description": (
+                    "Stripped of the pitch language, this is a vertical SaaS tool that "
+                    "collects compliance evidence from systems the customer already runs "
+                    "and packages it for an auditor."
+                ),
+                "core_bet": (
+                    "That regulatory deadlines force mid-market buyers to pay for "
+                    "automation they would otherwise defer indefinitely."
+                ),
+                "load_bearing_assumption": (
+                    "That a regional incumbent can hold the niche before a well-funded "
+                    "global player decides to localize into it."
+                ),
+            }
+
+        if stage == "visionary_pass":
+            return {
+                "seat_id": seat_id,
+                "stage": "visionary_pass",
+                "upside_if_it_works": (
+                    "At its best this becomes the system of record for compliance in its "
+                    "region — the place every audit artifact is born, so switching means "
+                    "re-papering years of evidence. That is a durable, expensive-to-leave "
+                    "position, not a feature."
+                ),
+                "worth_building": True,
+                "what_must_be_true": (
+                    "The team must own the auditor relationship and the evidence "
+                    "repository deeply enough that leaving is genuinely painful."
+                ),
+            }
+
+        if stage == "gtm_stage":
+            return {
+                "seat_id": seat_id,
+                "stage": "gtm_stage",
+                "one_promise": (
+                    "Pass your audit with a fraction of the manual effort, with evidence "
+                    "an examiner already trusts."
+                ),
+                "primary_channel": (
+                    "Co-selling through the managed security providers who already hold "
+                    "the buyer relationship."
+                ),
+                "first_motion": (
+                    "Convert one lighthouse customer in the target region into a public "
+                    "reference with hard before/after numbers."
+                ),
+            }
 
         raise ValueError(f"Unknown stage: {stage}")
 

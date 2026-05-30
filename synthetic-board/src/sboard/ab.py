@@ -212,6 +212,8 @@ def _run_board(
         raise ABError(f"No persona files found in {personas_dir}")
     if any(s not in all_personas for s in V1_SEATS):
         raise ABError(f"Missing required v1 seats in {personas_dir}")
+    # TRANSITIONAL (remove at v2.4): seat only the v1 trio. v2.4 makes seating
+    # protocol-driven (the --protocol idea_screen_v2 path seats all 7).
     personas = {sid: p for sid, p in all_personas.items() if sid in V1_SEATS}
     state = MeetingState(petition=petition, personas=personas, seed=seed)
     try:

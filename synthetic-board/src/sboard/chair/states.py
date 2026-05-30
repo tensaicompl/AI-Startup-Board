@@ -17,13 +17,25 @@ from sboard.schemas import (
     AnonymizedReview,
     DevilsAdvocateOutput,
     ForcedDissent,
+    GtmOutput,
+    IdeaAnalysisOutput,
     Position,
     Rebuttal,
     SealedOpening,
+    VisionaryOutput,
     Vote,
 )
 from sboard.seats.llm_client import AnthropicClient
 from sboard.seats.seat import SeatStatus, run_seat
+
+
+class GtmPreconditionError(Exception):
+    """Raised if the GTM stage is invoked when the verdict trend is kill (or unset).
+
+    GTM is conditional on tally arithmetic (verdict != kill); this guard makes the
+    precondition explicit so a mis-wired graph fails loudly rather than producing a
+    GTM section for a killed idea. Routing itself lives in the state machine (v2.4).
+    """
 
 
 def do_convene(state: MeetingState) -> None:
@@ -356,3 +368,153 @@ def do_forced_dissent_check(state: MeetingState, client: AnthropicClient) -> Non
 
     state.current_state = ProtocolState.MEMO_SYNTHESIS
     state.state_timings["FORCED_DISSENT_CHECK"] = time.monotonic() - start
+
+
+# --- v2 stages (Task v2.3) ---
+#
+# These functions do their work and label the transcript; they do NOT decide the
+# next state. The v2 graph wiring (Task v2.4) owns every transition, including the
+# verdict!=kill routing into GTM. The GTM precondition guard below is a defensive
+# assertion, not a routing decision.
+
+
+def _idea_analysis_participants(state: MeetingState) -> list[str]:
+    """All voting seats plus the broad advisor (e.g. growth-advisor)."""
+    return [sid for sid, p in state.personas.items() if p.voting or p.advisor]
+
+
+def _visionary_participants(state: MeetingState) -> list[str]:
+    """The visionary seat plus the broad advisor."""
+    return [
+        sid
+        for sid, p in state.personas.items()
+        if p.role == "Visionary" or p.advisor
+    ]
+
+
+def _gtm_participants(state: MeetingState) -> list[str]:
+    """The gtm-only seat plus the broad advisor."""
+    return [sid for sid, p in state.personas.items() if p.gtm_only or p.advisor]
+
+
+def _positions_block(state: MeetingState) -> list[str]:
+    lines: list[str] = []
+    for sid in state.responding_seat_ids:
+        ss = state.seat_states[sid]
+        if ss.rebuttal:
+            lines.append(f"  - {ss.rebuttal.position.value}: {ss.rebuttal.rebuttal_text}")
+        elif ss.sealed_opening:
+            lines.append(f"  - {ss.sealed_opening.position.value}: {ss.sealed_opening.one_paragraph_case}")
+    return lines
+
+
+def do_idea_analysis(state: MeetingState, client: AnthropicClient) -> None:
+    """S: voting seats + the advisor describe what the business actually does,
+    stripped of pitch language. Memory: rebuttals + petition."""
+    start = time.monotonic()
+    state.current_state = ProtocolState.IDEA_ANALYSIS
+
+    prompt = (
+        f"Petition pitch:\n{state.petition.pitch}\n\n"
+        f"Context:\n{state.petition.context or '(none provided)'}\n\n"
+        "The board's current positions:\n"
+        + "\n".join(_positions_block(state))
+        + "\n\nStrip away the pitch language and the founder's framing. In plain "
+        "terms: what does this business actually do, what is the core bet it is "
+        "making, and what is the load-bearing assumption the pitch glosses over?"
+    )
+
+    for sid in _idea_analysis_participants(state):
+        persona = state.personas[sid]
+        result = run_seat(client, persona, "idea_analysis", prompt, IdeaAnalysisOutput)
+        if result.status == SeatStatus.RESPONDED and isinstance(
+            result.output, IdeaAnalysisOutput
+        ):
+            state.idea_analysis_outputs[sid] = result.output
+            if result.response:
+                state.total_llm_cost_usd += result.response.cost_usd
+        state.log("idea_analysis_result", {"status": result.status}, seat_id=sid)
+
+    state.state_timings["IDEA_ANALYSIS"] = time.monotonic() - start
+
+
+def do_visionary_pass(state: MeetingState, client: AnthropicClient) -> None:
+    """S: the visionary + the advisor produce the upside case. ALWAYS runs, even
+    when the trend is kill — "nothing would save it" is itself signal. Memory:
+    idea_analysis + rebuttals + petition."""
+    start = time.monotonic()
+    state.current_state = ProtocolState.VISIONARY_PASS
+
+    analysis_lines = [
+        f"  - {ia.plain_description} (core bet: {ia.core_bet})"
+        for ia in state.idea_analysis_outputs.values()
+    ]
+    prompt = (
+        f"Petition pitch:\n{state.petition.pitch}\n\n"
+        + ("What the business actually is:\n" + "\n".join(analysis_lines) + "\n\n" if analysis_lines else "")
+        + "The board's current positions:\n"
+        + "\n".join(_positions_block(state))
+        + "\n\nIgnore the prevailing mood, including any lean toward killing it. If "
+        "this works, what does it become at its best? Is there a version worth "
+        "building at all? If nothing would save it, say so plainly and set "
+        "worth_building to false — that judgment is useful to the board."
+    )
+
+    for sid in _visionary_participants(state):
+        persona = state.personas[sid]
+        result = run_seat(client, persona, "visionary_pass", prompt, VisionaryOutput)
+        if result.status == SeatStatus.RESPONDED and isinstance(
+            result.output, VisionaryOutput
+        ):
+            state.visionary_outputs[sid] = result.output
+            if result.response:
+                state.total_llm_cost_usd += result.response.cost_usd
+        state.log(
+            "visionary_pass_result",
+            {
+                "status": result.status,
+                "worth_building": getattr(result.output, "worth_building", None),
+            },
+            seat_id=sid,
+        )
+
+    state.state_timings["VISIONARY_PASS"] = time.monotonic() - start
+
+
+def do_gtm_stage(state: MeetingState, client: AnthropicClient) -> None:
+    """S: the gtm-only seat + the advisor produce a go-to-market analysis. Runs
+    ONLY when the post-vote verdict trend is not kill. Memory: the full meeting up
+    to the vote."""
+    if state.final_verdict is None or state.final_verdict == Position.KILL:
+        raise GtmPreconditionError(
+            f"GTM stage requires a non-kill verdict trend; got {state.final_verdict}"
+        )
+
+    start = time.monotonic()
+    state.current_state = ProtocolState.GTM_STAGE
+
+    analysis_lines = [
+        f"  - {ia.plain_description}" for ia in state.idea_analysis_outputs.values()
+    ]
+    vision_lines = [
+        f"  - {vo.upside_if_it_works}" for vo in state.visionary_outputs.values()
+    ]
+    prompt = (
+        f"Petition pitch:\n{state.petition.pitch}\n\n"
+        f"Verdict trend (post-vote): {state.final_verdict.value}\n\n"
+        + ("What the business is:\n" + "\n".join(analysis_lines) + "\n\n" if analysis_lines else "")
+        + ("The upside case:\n" + "\n".join(vision_lines) + "\n\n" if vision_lines else "")
+        + "Produce a go-to-market analysis: the single promise to the buyer, the "
+        "primary channel that actually reaches them, and the first concrete motion."
+    )
+
+    for sid in _gtm_participants(state):
+        persona = state.personas[sid]
+        result = run_seat(client, persona, "gtm_stage", prompt, GtmOutput)
+        if result.status == SeatStatus.RESPONDED and isinstance(result.output, GtmOutput):
+            state.gtm_outputs[sid] = result.output
+            if result.response:
+                state.total_llm_cost_usd += result.response.cost_usd
+        state.log("gtm_stage_result", {"status": result.status}, seat_id=sid)
+
+    state.state_timings["GTM_STAGE"] = time.monotonic() - start

@@ -147,7 +147,47 @@ class ForcedDissent(BaseModel):
     would_change_mind_if: Annotated[str, Field(min_length=20, max_length=500)]
 
 
-# Union type for all seat outputs
+# --- v2 stage outputs (Task v2.3) ---
+
+
+class IdeaAnalysisOutput(BaseModel):
+    """do_idea_analysis: what the business actually does, stripped of pitch language."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    seat_id: str
+    stage: Literal["idea_analysis"]
+    plain_description: Annotated[str, Field(min_length=50, max_length=800)]
+    core_bet: Annotated[str, Field(min_length=20, max_length=400)]
+    load_bearing_assumption: Annotated[str, Field(min_length=20, max_length=400)]
+
+
+class VisionaryOutput(BaseModel):
+    """do_visionary_pass: the upside if it works. Always produced — `worth_building`
+    False is itself signal (the 'nothing will save it' answer)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    seat_id: str
+    stage: Literal["visionary_pass"]
+    upside_if_it_works: Annotated[str, Field(min_length=50, max_length=1000)]
+    worth_building: bool
+    what_must_be_true: Annotated[str, Field(min_length=20, max_length=500)]
+
+
+class GtmOutput(BaseModel):
+    """do_gtm_stage: go-to-market analysis. Produced only when verdict trend != kill."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    seat_id: str
+    stage: Literal["gtm_stage"]
+    one_promise: Annotated[str, Field(min_length=20, max_length=400)]
+    primary_channel: Annotated[str, Field(min_length=10, max_length=300)]
+    first_motion: Annotated[str, Field(min_length=20, max_length=400)]
+
+
+# Union type for all seat / stage outputs
 SeatOutput = (
     SealedOpening
     | AnonymizedReview
@@ -155,6 +195,9 @@ SeatOutput = (
     | DevilsAdvocateOutput
     | Vote
     | ForcedDissent
+    | IdeaAnalysisOutput
+    | VisionaryOutput
+    | GtmOutput
 )
 
 
