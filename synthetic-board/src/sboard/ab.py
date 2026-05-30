@@ -205,7 +205,15 @@ def _run_board(
     if not personas:
         raise ABError(f"No persona files found in {personas_dir}")
     state = MeetingState(petition=petition, personas=personas, seed=seed)
-    final = run_meeting(state, client)
+    try:
+        final = run_meeting(state, client)
+    except ABError:
+        raise
+    except Exception as exc:
+        # A verbose live model can leave a stage with no valid output (e.g. every
+        # seat's vote overruns its limits), which then fails memo assembly. Surface
+        # it as a clean board failure rather than an opaque traceback.
+        raise ABError(f"Board pipeline failed: {exc!s}"[:500]) from exc
     if final.current_state == ProtocolState.ABORTED or final.memo is None:
         raise ABError(final.error or "Board aborted before producing a memo")
     return final

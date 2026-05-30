@@ -376,6 +376,38 @@ class MockClient(AnthropicClient):
         }
 
 
+def _extract_tool_payload(raw: object, output_schema: type[BaseModel]) -> dict[str, Any]:
+    """Recover the real tool arguments from `tool_use.input`.
+
+    Models intermittently nest the arguments under a generic wrapper key
+    (observed: 'parameter', '$PARAMETER_NAME') or add stray meta keys (observed:
+    '$FUNCTION_NAME'), even under forced tool_choice. Match the schema's own
+    field names to find the payload, then keep only schema fields (the models use
+    extra='forbid', so dropping anything else is exactly right).
+    """
+    expected = set(output_schema.model_fields.keys())
+    if not isinstance(raw, dict):
+        return {}
+    raw_dict = cast("dict[str, Any]", raw)
+
+    if expected & raw_dict.keys():
+        return {k: v for k, v in raw_dict.items() if k in expected}
+
+    # No schema fields at the top level — look one level down for a wrapper.
+    for value in raw_dict.values():
+        if isinstance(value, dict) and expected & value.keys():
+            return {k: v for k, v in value.items() if k in expected}
+        if isinstance(value, str):
+            try:
+                parsed = json.loads(value)
+            except (json.JSONDecodeError, ValueError):
+                continue
+            if isinstance(parsed, dict) and expected & parsed.keys():
+                return {k: v for k, v in parsed.items() if k in expected}
+
+    return raw_dict  # give up; let downstream validation raise a clear error
+
+
 class LiveAnthropicClient(AnthropicClient):
     """Real Anthropic client. Forces schema-valid structured output via tool-use.
 
@@ -419,7 +451,9 @@ class LiveAnthropicClient(AnthropicClient):
             "name": "emit_structured_output",
             "description": (
                 "Return the result as a single structured object conforming exactly "
-                "to the provided JSON schema. Populate every required field."
+                "to the provided JSON schema. Put every field at the TOP LEVEL of the "
+                "tool input — do not nest the fields under any wrapper key. Populate "
+                "every required field."
             ),
             "input_schema": output_schema.model_json_schema(),
         }
@@ -432,18 +466,21 @@ class LiveAnthropicClient(AnthropicClient):
             tool_choice={"type": "tool", "name": "emit_structured_output"},
         )
 
-        tool_input: dict[str, Any] | None = None
+        raw_input: object = None
+        found = False
         for block in response.content:
             if block.type == "tool_use":
-                tool_input = cast("dict[str, Any]", block.input)
+                raw_input = block.input
+                found = True
                 break
-        if tool_input is None:
+        if not found:
             raise ValueError(
                 f"No tool_use block in response (seat={seat_id}, stage={stage})"
             )
 
+        payload = _extract_tool_payload(raw_input, output_schema)
         return LLMResponse(
-            content=json.dumps(tool_input),
+            content=json.dumps(payload),
             model=response.model,
             input_tokens=response.usage.input_tokens,
             output_tokens=response.usage.output_tokens,

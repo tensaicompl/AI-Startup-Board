@@ -306,3 +306,61 @@ def test_live_client_extracts_tool_use(monkeypatch: pytest.MonkeyPatch) -> None:
     assert resp.model == "claude-opus-4-7"
     assert resp.input_tokens == 11
     assert resp.output_tokens == 22
+
+
+def test_extract_tool_payload_unwraps_and_strips() -> None:
+    """Models intermittently wrap tool args under a generic key or add stray meta
+    keys (seen live: 'parameter', '$PARAMETER_NAME', '$FUNCTION_NAME'). The
+    extractor must recover the real payload in every case."""
+    from sboard.schemas import SealedOpening
+    from sboard.seats.llm_client import _extract_tool_payload
+
+    real = {
+        "seat_id": "operator-ceo",
+        "stage": "sealed_opening",
+        "position": "kill",
+        "one_paragraph_case": "x" * 120,
+        "top_three_reasons": ["a" * 12, "b" * 12, "c" * 12],
+        "kill_criteria": ["k" * 12],
+        "confidence_raw": 0.5,
+    }
+    # already-correct, dict wrapper, json-string wrapper, stray meta key
+    assert _extract_tool_payload(real, SealedOpening) == real
+    assert _extract_tool_payload({"parameter": real}, SealedOpening) == real
+    assert _extract_tool_payload({"$PARAMETER_NAME": json.dumps(real)}, SealedOpening) == real
+    assert _extract_tool_payload(
+        {"$FUNCTION_NAME": "emit_structured_output", **real}, SealedOpening
+    ) == real
+    # the recovered payload actually validates
+    assert SealedOpening.model_validate(
+        _extract_tool_payload({"parameter": real}, SealedOpening)
+    )
+
+
+def test_run_seat_forces_canonical_seat_id() -> None:
+    """A real model invents seat_id values ('devils_advocate'); the chair must
+    overwrite them with the canonical persona id ('devils-advocate')."""
+    from sboard.schemas import SealedOpening
+    from sboard.seats.llm_client import LLMResponse
+    from sboard.seats.persona_loader import load_all_personas
+    from sboard.seats.seat import SeatStatus, run_seat
+
+    persona = load_all_personas(PERSONAS_DIR)["devils-advocate"]
+
+    class WrongIdClient(MockClient):
+        def call(self, **kw: object) -> LLMResponse:
+            data = {
+                "seat_id": "devils_advocate",  # wrong: underscore, not canonical
+                "stage": "sealed_opening",
+                "position": "kill",
+                "one_paragraph_case": "x" * 120,
+                "top_three_reasons": ["a" * 12, "b" * 12, "c" * 12],
+                "kill_criteria": ["k" * 12],
+                "confidence_raw": 0.5,
+            }
+            return LLMResponse(content=json.dumps(data), model="m", input_tokens=1, output_tokens=1)
+
+    res = run_seat(WrongIdClient(), persona, "sealed_opening", "msg", SealedOpening)
+    assert res.status == SeatStatus.RESPONDED
+    assert res.output is not None
+    assert res.output.seat_id == "devils-advocate"

@@ -53,12 +53,13 @@ def run_seat(
     Retries once on malformed output, then marks seat as abstain_malformed.
     """
     model_id = model or client.get_default_seat_model()
+    current_message = user_message
 
     for attempt in range(2):
         try:
             response = client.call(
                 system_prompt=persona.system_prompt,
-                user_message=user_message,
+                user_message=current_message,
                 output_schema=output_schema,
                 seat_id=persona.seat_id,
                 stage=stage,
@@ -73,6 +74,11 @@ def run_seat(
 
         try:
             data = json.loads(response.content)
+            # seat_id is the chair's to assign, not the model's: a real model
+            # invents values like "devils_advocate" instead of "devils-advocate".
+            # Force the canonical id before validation.
+            if isinstance(data, dict) and "seat_id" in output_schema.model_fields:
+                data["seat_id"] = persona.seat_id
             parsed = output_schema.model_validate(data)
             return SeatResult(
                 output=parsed,
@@ -85,6 +91,18 @@ def run_seat(
                     "Seat %s returned malformed output (attempt 1), retrying: %s",
                     persona.seat_id,
                     str(exc)[:200],
+                )
+                # Feed the exact failure back so the model corrects its own
+                # formatting. Live models routinely overrun max_length on terse
+                # fields (a 320-char rationale against a 300 cap); a blind retry
+                # repeats the mistake, an informed one fixes it.
+                current_message = (
+                    f"{user_message}\n\n"
+                    "Your previous response failed schema validation:\n"
+                    f"{str(exc)[:600]}\n"
+                    "Return a corrected response that satisfies EVERY field "
+                    "constraint — especially maximum string lengths. Keep each "
+                    "field comfortably within its limit."
                 )
                 continue
             return SeatResult(

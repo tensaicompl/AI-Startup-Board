@@ -143,43 +143,51 @@ def _compute_reasoning_overlap(state: MeetingState) -> float | None:
 
 
 def _build_synthesis_prompt(state: MeetingState) -> str:
-    """Build the prompt for the synthesis LLM call."""
+    """Build the prompt for the synthesis LLM call.
+
+    The output memo is rated blind against a single-LLM baseline, so the prose
+    must NOT reveal that it came from a multi-seat board. The input material may
+    mention the mechanism; the output must not (see Decision 007).
+    """
     parts: list[str] = [
-        f"The board has reached a verdict of: {state.final_verdict.value if state.final_verdict else 'unknown'}.",
-        f"Confidence-weighted score: {state.confidence_weighted:.2f}",
-        f"Confidence spread: {state.confidence_spread:.2f}",
+        f"Provisional verdict: {state.final_verdict.value if state.final_verdict else 'unknown'}.",
         "",
-        "Rebuttals from seats:",
+        "Source material (internal — never quote it or describe its structure):",
+        "",
+        "Positions:",
     ]
 
     for sid in state.responding_seat_ids:
         ss = state.seat_states[sid]
-        role = state.personas[sid].role
         if ss.rebuttal:
-            parts.append(f"  {role}: {ss.rebuttal.position.value} — {ss.rebuttal.rebuttal_text}")
+            parts.append(f"  - {ss.rebuttal.position.value}: {ss.rebuttal.rebuttal_text}")
 
     if state.devils_advocate_output:
         parts.extend([
             "",
-            f"Devil's Advocate steelman against {state.devils_advocate_output.majority_trend.value}:",
+            "Strongest counter-case to the majority position:",
             f"  {state.devils_advocate_output.steelman_against_majority}",
         ])
 
     if state.forced_dissent_output:
         parts.extend([
             "",
-            "Forced dissent (unanimous vote triggered this):",
-            f"  Counter-verdict: {state.forced_dissent_output.counter_verdict.value}",
+            "Additional counter-case:",
             f"  {state.forced_dissent_output.counter_case}",
         ])
 
     parts.extend([
         "",
-        "Write exactly two fields as JSON:",
-        '  "verdict_reasoning": the case for the winning verdict (≤200 words, concrete)',
-        '  "dissent_summary": the minority\'s strongest case, charitably stated (≤150 words)',
+        "Write a standalone advisory memo in a single, decisive advisor voice.",
+        "Output exactly two JSON fields:",
+        '  "verdict_reasoning": the case for the verdict (≤200 words, concrete).',
+        '  "dissent_summary": the strongest case against the verdict, charitably stated (≤150 words).',
         "",
-        "No other fields. No hedging. No padding.",
+        "Hard constraints on the prose (these are non-negotiable):",
+        "- Do NOT mention a board, panel, committee, seats, members, a vote, a tally,",
+        "  unanimity, dissent mechanics, a devil's advocate, an operator, or an outsider.",
+        "- Do NOT cite confidence numbers, scores, or any internal deliberation process.",
+        "- Write as one advisor addressing the founder directly. No hedging. No padding.",
     ])
 
     return "\n".join(parts)
@@ -200,7 +208,11 @@ def synthesize_memo(
     synthesis_output: SynthesisOutput | None = None
     for attempt in range(2):
         response = client.call(
-            system_prompt="You are a board memo writer. Output valid JSON with exactly two fields.",
+            system_prompt=(
+                "You are an advisory memo writer. Output valid JSON with exactly two "
+                "fields. Write in a neutral, standalone advisor voice that never "
+                "references any board, panel, seats, voting, or internal process."
+            ),
             user_message=prompt,
             output_schema=SynthesisOutput,
             seat_id="synthesis",

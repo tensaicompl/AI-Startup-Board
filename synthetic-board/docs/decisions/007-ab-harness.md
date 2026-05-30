@@ -83,3 +83,43 @@ gate needs only `--live` + the key. The two memos are structurally
 indistinguishable and a test asserts no pipeline tells (incl. source-figure
 names and the word "board") in the rater bundle. The 20-petition test set itself
 is the founder's to assemble (HANDOFF §9); the harness is complete.
+
+---
+
+## Addendum — live-run hardening (first real `--live` run)
+
+The first live A/B run surfaced four failure modes that mocks cannot, all fixed
+without altering argument quality (so §7 integrity holds — these are reliability
+and blindness fixes, not tuning to flatter the test):
+
+1. **Tool-payload wrapping.** Under forced `tool_choice`, models intermittently
+   nest the arguments under a generic wrapper key (observed: `parameter`,
+   `$PARAMETER_NAME`) or add a stray `$FUNCTION_NAME` key. `LiveAnthropicClient`
+   now runs `_extract_tool_payload`, which matches the schema's own field names to
+   recover the real object and drops anything else (the schemas are
+   `extra="forbid"`, so this is exactly right). Tool description also asks for
+   top-level fields.
+
+2. **Invented `seat_id`.** A real model fills the `seat_id` field with its own
+   value (`devils_advocate` vs the canonical `devils-advocate`), breaking persona
+   lookups and signatures. `run_seat` now overwrites `seat_id` with the canonical
+   persona id before validation — identity is the chair's to assign, not the
+   model's.
+
+3. **Verbose seats overrunning `max_length`.** Live models routinely exceed terse
+   field caps (e.g. a 320-char vote rationale against a 300 cap), and a blind
+   retry repeats the mistake. The single retry is now **informed**: the exact
+   validation error is fed back so the model corrects its own formatting. (Still
+   one retry, so the call-count tests hold.) `ab._run_board` also wraps the board
+   run so any residual pipeline failure surfaces as a clean `ABError` instead of a
+   traceback.
+
+4. **Prose leak.** The synthesis model wrote "the board votes kill (2.09/5.0)…",
+   naming the mechanism and citing internal scores — a fatal tell for the
+   founder-rater. The synthesis prompt + system prompt were rewritten to forbid
+   any reference to a board, seats, voting, dissent mechanics, or internal scores;
+   it must write as a single standalone advisor. A leak scan confirmed clean
+   output on the re-run. Note the residual confound this exposed: board memo prose
+   is written by **Sonnet** (synthesis) while the baseline is **Opus** — so
+   blind-rated "language" differences may be model-tier, not architecture; a fair
+   comparison should set `SBOARD_SYNTHESIS_MODEL` to the baseline's tier.
